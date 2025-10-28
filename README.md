@@ -1,6 +1,6 @@
-# 💊 PharmaFácil
+# 💊 Medify
 
-**PharmaFácil** es una **aplicación móvil desarrollada con Expo y React Native** que permite a los pacientes **comprar medicamentos bajo receta de manera remota**, de forma simple, rápida y segura.
+**Medify** es una **aplicación móvil desarrollada con Expo y React Native** que permite a los pacientes **comprar medicamentos bajo receta de manera remota**, de forma simple, rápida y segura.
 
 ---
 
