@@ -8,7 +8,7 @@
 
 Este proyecto fue desarrollado de forma **grupal** como parte de la **materia Ingeniería en Software** de la **Facultad de Ingeniería**, con el objetivo de aplicar los conceptos de análisis, diseño e implementación de sistemas de software en un entorno real.
 
-PharmaFácil busca **digitalizar el proceso de compra de medicamentos** con prescripción médica, brindando una herramienta accesible tanto para los pacientes como para las farmacias adheridas.
+Se busca **digitalizar el proceso de compra de medicamentos** con prescripción médica, brindando una herramienta accesible tanto para los pacientes como para las farmacias adheridas.
 
 ---
 
