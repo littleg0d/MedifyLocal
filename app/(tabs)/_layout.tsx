@@ -41,7 +41,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="recetas"
         options={{
-          title: 'Recetas',
+          title: 'Mis Recetas',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons 
               name={focused ? "receipt" : "receipt-outline"} 
@@ -56,7 +56,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="pedidos"
         options={{
-          title: 'Pedidos',
+          title: 'Mis Pedidos',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons 
               name={focused ? "cube" : "cube-outline"} 
@@ -79,6 +79,15 @@ export default function TabLayout() {
               color={color} 
             />
           ),
+        }}
+      />
+
+      {/* SOLICITUDES - OCULTO DEL TAB BAR */}
+      <Tabs.Screen
+        name="solicitudes"
+        options={{
+          href: null, // Esto oculta la pantalla del tab bar
+          title: 'Solicitudes',
         }}
       />
     </Tabs>

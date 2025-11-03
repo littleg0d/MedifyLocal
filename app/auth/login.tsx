@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context"; 
 import { auth } from "../../src/lib/firebase";
+import { globalStyles, colors } from "../../assets/styles";
 
 export default function Login() {
   const router = useRouter();
@@ -26,7 +27,6 @@ export default function Login() {
   const onSignIn = async () => {
     setError("");
 
-    // Validaciones
     if (!email.trim() || !password) {
       setError("Por favor completá todos los campos");
       return;
@@ -40,7 +40,6 @@ export default function Login() {
     try {
       setLoading(true);
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      // El redirect lo maneja _layout.tsx automáticamente
     } catch (e: any) {
       const code = String(e?.code || "");
       
@@ -54,7 +53,6 @@ export default function Login() {
         "auth/network-request-failed": "Error de conexión. Verificá tu internet",
       };
 
-      // Buscar el mensaje correspondiente
       let humanMessage = "No pudimos iniciar sesión. Intentá de nuevo";
       for (const [key, message] of Object.entries(errorMessages)) {
         if (code.includes(key)) {
@@ -73,7 +71,6 @@ export default function Login() {
   };
 
   const handleGoogleSignIn = () => {
-    // TODO: Implementar Google sign-in
     Alert.alert("Próximamente", "El inicio de sesión con Google estará disponible pronto");
   };
 
@@ -90,16 +87,16 @@ export default function Login() {
         >
           {/* Header */}
           <View style={styles.logoWrap}>
-            <Ionicons name="medkit-outline" size={28} color="#16A34A" />
+            <Ionicons name="medkit-outline" size={28} color={colors.primaryDark} />
           </View>
           <Text style={styles.title}>Medify</Text>
-          <Text style={styles.subtitle}>Tu medicación, sin complicaciones.</Text>
+          <Text style={globalStyles.subtitle}>Tu medicación, sin complicaciones.</Text>
 
           {/* Mensaje de error */}
           {error ? (
-            <View style={styles.errorContainer}>
+            <View style={globalStyles.errorContainer}>
               <Ionicons name="alert-circle" size={20} color="#DC2626" />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={globalStyles.errorText}>{error}</Text>
             </View>
           ) : null}
 
@@ -117,8 +114,8 @@ export default function Login() {
               textContentType="emailAddress"
               returnKeyType="next"
               editable={!loading}
-              style={[styles.input, error && styles.inputError]}
-              placeholderTextColor="#9CA3AF"
+              style={[globalStyles.input, error && globalStyles.inputError]}
+              placeholderTextColor={colors.textTertiary}
             />
             <TextInput
               placeholder="Contraseña"
@@ -132,20 +129,20 @@ export default function Login() {
               returnKeyType="done"
               onSubmitEditing={onSignIn}
               editable={!loading}
-              style={[styles.input, error && styles.inputError]}
-              placeholderTextColor="#9CA3AF"
+              style={[globalStyles.input, error && globalStyles.inputError]}
+              placeholderTextColor={colors.textTertiary}
             />
 
             <Pressable 
               style={({ pressed }) => [
-                styles.primaryBtn,
-                pressed && styles.buttonPressed,
-                loading && styles.buttonDisabled
+                globalStyles.primaryButton,
+                pressed && globalStyles.buttonPressed,
+                loading && globalStyles.buttonDisabled
               ]} 
               onPress={onSignIn}
               disabled={loading}
             >
-              <Text style={styles.primaryText}>
+              <Text style={globalStyles.primaryButtonText}>
                 {loading ? "Iniciando sesión..." : "Iniciar sesión"}
               </Text>
             </Pressable>
@@ -161,10 +158,10 @@ export default function Login() {
           </View>
 
           {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>o</Text>
-            <View style={styles.divider} />
+          <View style={globalStyles.dividerRow}>
+            <View style={globalStyles.divider} />
+            <Text style={globalStyles.dividerText}>o</Text>
+            <View style={globalStyles.divider} />
           </View>
 
           {/* Social buttons */}
@@ -172,13 +169,13 @@ export default function Login() {
             <Pressable 
               style={({ pressed }) => [
                 styles.socialBtn,
-                pressed && styles.buttonPressed,
-                loading && styles.buttonDisabled
+                pressed && globalStyles.buttonPressed,
+                loading && globalStyles.buttonDisabled
               ]}
               disabled={loading}
               onPress={handleGoogleSignIn}
             >
-              <AntDesign name="google" size={18} color="#111827" />
+              <AntDesign name="google" size={18} color={colors.textPrimary} />
               <Text style={styles.socialText}>Continuar con Google</Text>
             </Pressable>
           </View>
@@ -203,7 +200,7 @@ export default function Login() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: colors.surface,
   },
   keyboardView: {
     flex: 1,
@@ -225,70 +222,15 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#111827",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6B7280",
-    textAlign: "center",
-  },
-  errorContainer: {
-    width: "100%",
-    backgroundColor: "#FEE2E2",
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#FCA5A5",
-  },
-  errorText: {
-    color: "#DC2626",
-    fontSize: 14,
-    fontWeight: "500",
-    flex: 1,
+    color: colors.textPrimary,
   },
   form: {
     width: "100%",
     gap: 12,
     marginTop: 6,
   },
-  input: {
-    height: 48,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    backgroundColor: "#F3F4F6",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    fontSize: 16,
-    color: "#111827",
-  },
-  inputError: {
-    borderColor: "#FCA5A5",
-    backgroundColor: "#FEF2F2",
-  },
-  primaryBtn: {
-    height: 48,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#22C55E",
-  },
-  primaryText: {
-    color: "white",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  buttonPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.98 }],
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
   link: {
-    color: "#16A34A",
+    color: colors.primaryDark,
     fontWeight: "600",
     paddingVertical: 8,
     textAlign: "center",
@@ -299,21 +241,6 @@ const styles = StyleSheet.create({
   linkDisabled: {
     opacity: 0.5,
   },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    width: "100%",
-    marginTop: 8,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E5E7EB",
-  },
-  dividerText: {
-    color: "#9CA3AF",
-  },
   socialContainer: {
     gap: 10,
     width: "100%",
@@ -322,15 +249,15 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#F9FAFB",
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceHover,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
   },
   socialText: {
-    color: "#111827",
+    color: colors.textPrimary,
     fontWeight: "600",
     fontSize: 16,
   },
@@ -340,7 +267,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   registerText: {
-    color: "#6B7280",
+    color: colors.textSecondary,
     fontSize: 14,
   },
 });
