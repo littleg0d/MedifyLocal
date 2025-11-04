@@ -143,10 +143,7 @@ export default function Recetas() {
       <View style={globalStyles.header}>
         <View style={{ width: 48 }} />
         <Text style={globalStyles.titleMedium}>Mis Recetas</Text>
-        <Pressable style={globalStyles.notificationButton}>
-          <Ionicons name="notifications-outline" size={24} color={colors.textLight} />
-          <View style={globalStyles.notificationDot} />
-        </Pressable>
+        <View style={{ width: 48 }} />
       </View>
 
       <ScrollView style={styles.scrollView}>

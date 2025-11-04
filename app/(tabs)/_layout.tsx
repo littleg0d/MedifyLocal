@@ -1,18 +1,20 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
+import { colors } from '../../assets/styles'; // Si lo tienes
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#16A34A',
+        tabBarActiveTintColor: colors.primary, // Usar tu color global
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
           backgroundColor: 'white',
           borderTopWidth: 1,
           borderTopColor: '#E5E7EB',
-          paddingBottom: 8,
+          paddingBottom: Platform.OS === 'ios' ? 8 : 8, // Por si necesitas ajuste iOS
           paddingTop: 8,
           height: 60,
         },
@@ -22,7 +24,6 @@ export default function TabLayout() {
         },
       }}>
       
-      {/* HOME */}
       <Tabs.Screen
         name="index"
         options={{
@@ -37,7 +38,6 @@ export default function TabLayout() {
         }}
       />
 
-      {/* RECETAS */}
       <Tabs.Screen
         name="recetas"
         options={{
@@ -52,7 +52,6 @@ export default function TabLayout() {
         }}
       />
 
-      {/* PEDIDOS */}
       <Tabs.Screen
         name="pedidos"
         options={{
@@ -67,7 +66,6 @@ export default function TabLayout() {
         }}
       />
 
-      {/* PERFIL */}
       <Tabs.Screen
         name="perfil"
         options={{
@@ -82,11 +80,10 @@ export default function TabLayout() {
         }}
       />
 
-      {/* SOLICITUDES - OCULTO DEL TAB BAR */}
       <Tabs.Screen
         name="solicitudes"
         options={{
-          href: null, // Esto oculta la pantalla del tab bar
+          href: null,
           title: 'Solicitudes',
         }}
       />

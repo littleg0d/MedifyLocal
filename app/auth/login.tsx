@@ -27,19 +27,29 @@ export default function Login() {
   const onSignIn = async () => {
     setError("");
 
+    // Validar campos vacíos
     if (!email.trim() || !password) {
       setError("Por favor completá todos los campos");
       return;
     }
 
-    if (!email.includes("@")) {
-      setError("Por favor ingresá un email válido");
+    // Validar email con regex (igual que en register)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError("Email inválido");
+      return;
+    }
+
+    // Validar longitud mínima de contraseña
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres");
       return;
     }
 
     try {
       setLoading(true);
       await signInWithEmailAndPassword(auth, email.trim(), password);
+      // El redirect lo maneja automáticamente _layout.tsx
     } catch (e: any) {
       const code = String(e?.code || "");
       
@@ -62,6 +72,8 @@ export default function Login() {
       }
       
       setError(humanMessage);
+      
+      // Solo mostrar en desarrollo
       if (__DEV__) {
         console.error("Login error:", code, e.message);
       }
@@ -147,14 +159,14 @@ export default function Login() {
               </Text>
             </Pressable>
 
-            {/* Forgot password */}
-            <Link href="/auth/forgot" asChild disabled={loading}>
+            {/* Forgot password -  */}
+            { <Link href="/auth/forgot" asChild disabled={loading}>
               <Pressable disabled={loading}>
                 <Text style={[styles.link, loading && styles.linkDisabled]}>
                   ¿Olvidaste tu contraseña?
                 </Text>
               </Pressable>
-            </Link>
+            </Link> }
           </View>
 
           {/* Divider */}

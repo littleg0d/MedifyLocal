@@ -1,4 +1,4 @@
-import { StyleSheet } from "react-native";
+import { StyleSheet, Platform } from "react-native";
 
 // Colores del tema
 export const colors = {
@@ -53,6 +53,13 @@ export const colors = {
   gray900: "#111827",
 };
 
+// Fuente por defecto
+const defaultFontFamily = Platform.select({
+  ios: "System",
+  android: "Roboto",
+  default: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+});
+
 // Estilos globales compartidos
 export const globalStyles = StyleSheet.create({
   // Containers
@@ -106,18 +113,21 @@ export const globalStyles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     color: colors.textPrimary,
+    fontFamily: defaultFontFamily,
   },
   
   titleMedium: {
     fontSize: 20,
     fontWeight: "700",
     color: colors.textLight,
+    fontFamily: defaultFontFamily,
   },
   
   titleSmall: {
     fontSize: 18,
     fontWeight: "700",
     color: colors.textPrimary,
+    fontFamily: defaultFontFamily,
   },
   
   sectionTitle: {
@@ -125,6 +135,7 @@ export const globalStyles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
     marginBottom: 16,
+    fontFamily: defaultFontFamily,
   },
   
   // Subtítulos y textos
@@ -132,6 +143,7 @@ export const globalStyles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: "center",
+    fontFamily: defaultFontFamily,
   },
   
   emptyTitle: {
@@ -140,6 +152,7 @@ export const globalStyles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 16,
     textAlign: "center",
+    fontFamily: defaultFontFamily,
   },
   
   emptyText: {
@@ -148,12 +161,14 @@ export const globalStyles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
     lineHeight: 20,
+    fontFamily: defaultFontFamily,
   },
   
   loadingText: {
     marginTop: 12,
     color: colors.textMuted,
     fontSize: 16,
+    fontFamily: defaultFontFamily,
   },
   
   // Inputs
@@ -165,6 +180,7 @@ export const globalStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     color: colors.textPrimary,
+    fontFamily: defaultFontFamily,
   },
   
   inputDisabled: {
@@ -189,6 +205,7 @@ export const globalStyles = StyleSheet.create({
     fontWeight: "600",
     color: colors.gray700,
     marginBottom: 8,
+    fontFamily: defaultFontFamily,
   },
   
   // Buttons
@@ -207,6 +224,7 @@ export const globalStyles = StyleSheet.create({
     color: colors.surface,
     fontSize: 16,
     fontWeight: "700",
+    fontFamily: defaultFontFamily,
   },
   
   secondaryButton: {
@@ -220,6 +238,7 @@ export const globalStyles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 16,
     fontWeight: "600",
+    fontFamily: defaultFontFamily,
   },
   
   dangerButton: {
@@ -238,6 +257,7 @@ export const globalStyles = StyleSheet.create({
     color: colors.error,
     fontWeight: "600",
     fontSize: 16,
+    fontFamily: defaultFontFamily,
   },
   
   buttonPressed: {
@@ -291,11 +311,13 @@ export const globalStyles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: "600",
+    fontFamily: defaultFontFamily,
   },
   
   badgeTextMedium: {
     fontSize: 14,
     fontWeight: "600",
+    fontFamily: defaultFontFamily,
   },
   
   // Layout helpers
@@ -338,6 +360,7 @@ export const globalStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
     flex: 1,
+    fontFamily: defaultFontFamily,
   },
   
   // Dividers
@@ -357,6 +380,7 @@ export const globalStyles = StyleSheet.create({
   
   dividerText: {
     color: colors.textTertiary,
+    fontFamily: defaultFontFamily,
   },
   
   // Modal styles
@@ -385,6 +409,7 @@ export const globalStyles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: colors.textPrimary,
+    fontFamily: defaultFontFamily,
   },
   
   // Notification button

@@ -1,40 +1,38 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Modal } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Picker } from '@react-native-picker/picker';
 import { auth, db } from "../../src/lib/firebase";
 import { signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { globalStyles, colors } from "../../assets/styles";
-const LOCALIDADES_BS_AS = [
-  "Seleccioná tu localidad",
-  "La Plata",
-  "Mar del Plata",
-  "Bahía Blanca",
-  "Quilmes",
-  "Avellaneda",
-  // ... (resto de localidades)
-].sort();
+import { Picker } from "@react-native-picker/picker";
+import { PROVINCIAS, OBRAS_SOCIALES } from "../../src/constants/argentina";
 
 export default function Perfil() {
-  const [userData, setUserData] = useState({
+  // Datos EDITABLES
+  const [addressData, setAddressData] = useState({
+    street: "",
+    city: "",
+    province: "Seleccioná tu provincia",
+    postalCode: "",
+  });
+
+  const [obraSocialData, setObraSocialData] = useState({
+    name: "Seleccioná tu obra social",
+    number: "",
+  });
+
+  const [phone, setPhone] = useState("");
+
+  // Datos READ-ONLY (no editables)
+  const [readOnlyData, setReadOnlyData] = useState({
     firstName: "",
     lastName: "",
     dni: "",
-    phone: "",
-  });
-  
-  const [addressData, setAddressData] = useState({
-    name: "",
-    street: "",
-    department: "",
-    postalCode: "",
-    city: "Seleccioná tu localidad",
-    province: "Buenos Aires",
+    birthDate: "",
   });
 
-  const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -52,50 +50,57 @@ export default function Perfil() {
 
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setUserData({
+        
+        // Datos READ-ONLY
+        setReadOnlyData({
           firstName: data.firstName || "",
           lastName: data.lastName || "",
           dni: data.dni || "",
-          phone: data.phone || "",
+          birthDate: data.birthDate || "",
         });
 
-        if (data.address) {
-          setAddressData({
-            name: data.address.name || "",
-            street: data.address.street || "",
-            department: data.address.department || "",
-            postalCode: data.address.postalCode || "",
-            city: data.address.city || "Seleccioná tu localidad",
-            province: data.address.province || "Buenos Aires",
-          });
-        }
+        // Datos EDITABLES
+        setPhone(data.phone || "");
+
+        setAddressData({
+          street: data.address?.street || "",
+          city: data.address?.city || "",
+          province: data.address?.province || "Seleccioná tu provincia",
+          postalCode: data.address?.postalCode || "",
+        });
+
+        setObraSocialData({
+          name: data.obraSocial?.name || "Seleccioná tu obra social",
+          number: data.obraSocial?.number || "",
+        });
       }
     } catch (error) {
       console.error("Error al cargar datos:", error);
+      Alert.alert("Error", "No pudimos cargar tus datos.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveAddress = () => {
-    if (!addressData.name.trim()) {
-      Alert.alert("Atención", "Ingresá un nombre para tu dirección (ej: Casa, Trabajo)");
-      return;
+  const validateData = () => {
+    if (addressData.province === "Seleccioná tu provincia") {
+      Alert.alert("Error", "Por favor seleccioná una provincia");
+      return false;
     }
-    if (!addressData.street.trim()) {
-      Alert.alert("Atención", "Ingresá tu dirección completa");
-      return;
+    if (obraSocialData.name === "Seleccioná tu obra social") {
+      Alert.alert("Error", "Por favor seleccioná una obra social");
+      return false;
     }
-    if (addressData.city === "Seleccioná tu localidad") {
-      Alert.alert("Atención", "Seleccioná tu localidad");
-      return;
+    if (!obraSocialData.number.trim()) {
+      Alert.alert("Error", "El número de afiliado es obligatorio");
+      return false;
     }
-
-    setModalVisible(false);
-    Alert.alert("✓", "Dirección guardada. No olvides guardar los cambios.");
+    return true;
   };
 
   const handleSave = async () => {
+    if (!validateData()) return;
+
     try {
       setSaving(true);
       const user = auth.currentUser;
@@ -103,21 +108,20 @@ export default function Perfil() {
 
       const docRef = doc(db, "users", user.uid);
       
-      await setDoc(docRef, {
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        phone: userData.phone,
-        address: addressData.street ? {
-          name: addressData.name,
-          street: addressData.street,
-          department: addressData.department,
-          postalCode: addressData.postalCode,
-          city: addressData.city,
+      // Solo actualizar campos EDITABLES
+      await updateDoc(docRef, {
+        phone: phone.trim(),
+        address: {
+          street: addressData.street.trim(),
+          city: addressData.city.trim(),
           province: addressData.province,
-        } : null,
-        displayName: `${userData.firstName} ${userData.lastName}`.trim(),
-        email: user.email,
-      }, { merge: true });
+          postalCode: addressData.postalCode.trim(),
+        },
+        obraSocial: {
+          name: obraSocialData.name,
+          number: obraSocialData.number.trim(),
+        },
+      });
 
       Alert.alert("¡Listo!", "Tus datos se guardaron correctamente");
     } catch (error) {
@@ -150,17 +154,6 @@ export default function Perfil() {
     );
   };
 
-  const getAddressPreview = () => {
-    if (!addressData.street) return "No configurada";
-    
-    let preview = addressData.street;
-    if (addressData.department) preview += `, ${addressData.department}`;
-    if (addressData.city !== "Seleccioná tu localidad") preview += `, ${addressData.city}`;
-    if (addressData.postalCode) preview += ` (CP ${addressData.postalCode})`;
-    
-    return preview;
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={globalStyles.container}>
@@ -178,6 +171,7 @@ export default function Perfil() {
           <Text style={globalStyles.title}>Mi Perfil</Text>
         </View>
 
+        {/* Email (solo lectura) */}
         <View style={globalStyles.section}>
           <Text style={globalStyles.label}>Correo electrónico</Text>
           <View style={globalStyles.inputDisabled}>
@@ -186,25 +180,24 @@ export default function Perfil() {
           </View>
         </View>
 
+        {/* Datos Personales (READ-ONLY) */}
+        <Text style={styles.sectionTitle}>Datos Personales</Text>
+        
         <View style={globalStyles.row}>
           <View style={[globalStyles.section, globalStyles.halfWidth]}>
             <Text style={globalStyles.label}>Nombre</Text>
-            <TextInput
-              style={globalStyles.input}
-              placeholder="Tu nombre"
-              value={userData.firstName}
-              onChangeText={(text) => setUserData({ ...userData, firstName: text })}
-            />
+            <View style={globalStyles.inputDisabled}>
+              <Ionicons name="person-outline" size={20} color={colors.textTertiary} />
+              <Text style={styles.inputText}>{readOnlyData.firstName || "No configurado"}</Text>
+            </View>
           </View>
 
           <View style={[globalStyles.section, globalStyles.halfWidth]}>
             <Text style={globalStyles.label}>Apellido</Text>
-            <TextInput
-              style={globalStyles.input}
-              placeholder="Tu apellido"
-              value={userData.lastName}
-              onChangeText={(text) => setUserData({ ...userData, lastName: text })}
-            />
+            <View style={globalStyles.inputDisabled}>
+              <Ionicons name="person-outline" size={20} color={colors.textTertiary} />
+              <Text style={styles.inputText}>{readOnlyData.lastName || "No configurado"}</Text>
+            </View>
           </View>
         </View>
 
@@ -213,48 +206,126 @@ export default function Perfil() {
             <Text style={globalStyles.label}>DNI</Text>
             <View style={globalStyles.inputDisabled}>
               <Ionicons name="card-outline" size={20} color={colors.textTertiary} />
-              <Text style={styles.inputText}>{userData.dni || "No configurado"}</Text>
+              <Text style={styles.inputText}>{readOnlyData.dni || "No configurado"}</Text>
             </View>
           </View>
 
           <View style={[globalStyles.section, globalStyles.halfWidth]}>
-            <Text style={globalStyles.label}>Teléfono</Text>
+            <Text style={globalStyles.label}>Fecha de Nacimiento</Text>
+            <View style={globalStyles.inputDisabled}>
+              <Ionicons name="calendar-outline" size={20} color={colors.textTertiary} />
+              <Text style={styles.inputText}>{readOnlyData.birthDate || "No configurado"}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={globalStyles.section}>
+          <Text style={globalStyles.label}>Teléfono</Text>
+          <TextInput
+            style={globalStyles.input}
+            placeholder="11 1234-5678"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            placeholderTextColor={colors.textTertiary}
+          />
+        </View>
+
+        {/* Dirección (EDITABLE) */}
+        <Text style={styles.sectionTitle}>Dirección</Text>
+
+        <View style={globalStyles.section}>
+          <Text style={globalStyles.label}>Calle y número</Text>
+          <TextInput
+            style={globalStyles.input}
+            placeholder="Av. Corrientes 1234"
+            value={addressData.street}
+            onChangeText={(text) => setAddressData({ ...addressData, street: text })}
+            placeholderTextColor={colors.textTertiary}
+          />
+        </View>
+
+        <View style={globalStyles.row}>
+          <View style={[globalStyles.section, globalStyles.halfWidth]}>
+            <Text style={globalStyles.label}>Ciudad</Text>
             <TextInput
               style={globalStyles.input}
-              placeholder="11 1234-5678"
-              value={userData.phone}
-              onChangeText={(text) => setUserData({ ...userData, phone: text })}
-              keyboardType="phone-pad"
+              placeholder="Buenos Aires"
+              value={addressData.city}
+              onChangeText={(text) => setAddressData({ ...addressData, city: text })}
+              placeholderTextColor={colors.textTertiary}
+            />
+          </View>
+
+          <View style={[globalStyles.section, globalStyles.halfWidth]}>
+            <Text style={globalStyles.label}>Código Postal</Text>
+            <TextInput
+              style={globalStyles.input}
+              placeholder="1000"
+              value={addressData.postalCode}
+              onChangeText={(text) => setAddressData({ ...addressData, postalCode: text })}
+              keyboardType="numeric"
+              placeholderTextColor={colors.textTertiary}
             />
           </View>
         </View>
 
         <View style={globalStyles.section}>
-          <Text style={globalStyles.label}>Dirección</Text>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.addressField,
-              pressed && styles.addressFieldPressed,
-            ]}
-            onPress={() => setModalVisible(true)}
-          >
-            <View style={styles.addressContent}>
-              <Ionicons name="home-outline" size={20} color={addressData.street ? colors.textPrimary : colors.textTertiary} />
-              <View style={styles.addressTextContainer}>
-                {addressData.name ? (
-                  <>
-                    <Text style={styles.addressName}>{addressData.name}</Text>
-                    <Text style={styles.addressPreview}>{getAddressPreview()}</Text>
-                  </>
-                ) : (
-                  <Text style={styles.addressPlaceholder}>Agregá tu dirección</Text>
-                )}
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
-          </Pressable>
+          <Text style={globalStyles.label}>Provincia *</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={addressData.province}
+              onValueChange={(value) => setAddressData({ ...addressData, province: value })}
+              style={styles.picker}
+            >
+              {PROVINCIAS.map((provincia) => (
+                <Picker.Item
+                  key={provincia}
+                  label={provincia}
+                  value={provincia}
+                  enabled={provincia !== "Seleccioná tu provincia"}
+                />
+              ))}
+            </Picker>
+          </View>
         </View>
 
+        {/* Obra Social (EDITABLE) */}
+        <Text style={styles.sectionTitle}>Obra Social</Text>
+
+        <View style={globalStyles.section}>
+          <Text style={globalStyles.label}>Obra Social *</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={obraSocialData.name}
+              onValueChange={(value) => setObraSocialData({ ...obraSocialData, name: value })}
+              style={styles.picker}
+            >
+              {OBRAS_SOCIALES.map((obra) => (
+                <Picker.Item
+                  key={obra}
+                  label={obra}
+                  value={obra}
+                  enabled={obra !== "Seleccioná tu obra social"}
+                />
+              ))}
+            </Picker>
+          </View>
+        </View>
+
+        <View style={globalStyles.section}>
+          <Text style={globalStyles.label}>Número de afiliado *</Text>
+          <TextInput
+            style={globalStyles.input}
+            placeholder="123456789"
+            value={obraSocialData.number}
+            onChangeText={(text) => setObraSocialData({ ...obraSocialData, number: text })}
+            keyboardType="numeric"
+            placeholderTextColor={colors.textTertiary}
+          />
+        </View>
+
+        {/* Botón Guardar */}
         <Pressable
           style={({ pressed }) => [
             globalStyles.primaryButton,
@@ -271,6 +342,7 @@ export default function Perfil() {
 
         <View style={{ marginTop: 16 }} />
 
+        {/* Botón Cerrar Sesión */}
         <Pressable
           style={({ pressed }) => [
             globalStyles.dangerButton,
@@ -284,121 +356,6 @@ export default function Perfil() {
 
         <View style={globalStyles.spacer} />
       </ScrollView>
-
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={globalStyles.modalOverlay}>
-          <View style={globalStyles.modalContent}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={globalStyles.modalHeader}>
-                <Text style={globalStyles.modalTitle}>Configurar Dirección</Text>
-                <Pressable onPress={() => setModalVisible(false)}>
-                  <Ionicons name="close" size={24} color={colors.textSecondary} />
-                </Pressable>
-              </View>
-
-              <View style={globalStyles.section}>
-                <Text style={globalStyles.label}>Nombre de la dirección</Text>
-                <TextInput
-                  style={globalStyles.input}
-                  placeholder="Ej: Casa, Trabajo, Casa de mamá"
-                  value={addressData.name}
-                  onChangeText={(text) => setAddressData({ ...addressData, name: text })}
-                />
-              </View>
-
-              <View style={globalStyles.section}>
-                <Text style={globalStyles.label}>Calle y número</Text>
-                <TextInput
-                  style={globalStyles.input}
-                  placeholder="Ej: Av. 7 N° 1234"
-                  value={addressData.street}
-                  onChangeText={(text) => setAddressData({ ...addressData, street: text })}
-                />
-              </View>
-
-              <View style={globalStyles.row}>
-                <View style={[globalStyles.section, globalStyles.halfWidth]}>
-                  <Text style={globalStyles.label}>Depto/Piso (opcional)</Text>
-                  <TextInput
-                    style={globalStyles.input}
-                    placeholder="Ej: 2B"
-                    value={addressData.department}
-                    onChangeText={(text) => setAddressData({ ...addressData, department: text })}
-                  />
-                </View>
-
-                <View style={[globalStyles.section, globalStyles.halfWidth]}>
-                  <Text style={globalStyles.label}>Código Postal</Text>
-                  <TextInput
-                    style={globalStyles.input}
-                    placeholder="1900"
-                    value={addressData.postalCode}
-                    onChangeText={(text) => setAddressData({ ...addressData, postalCode: text })}
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
-
-              <View style={globalStyles.section}>
-                <Text style={globalStyles.label}>Localidad</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={addressData.city}
-                    onValueChange={(value) => setAddressData({ ...addressData, city: value })}
-                    style={styles.picker}
-                  >
-                    {LOCALIDADES_BS_AS.map((localidad) => (
-                      <Picker.Item 
-                        key={localidad} 
-                        label={localidad} 
-                        value={localidad}
-                        enabled={localidad !== "Seleccioná tu localidad"}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
-
-              <View style={globalStyles.section}>
-                <Text style={globalStyles.label}>Provincia</Text>
-                <View style={globalStyles.inputDisabled}>
-                  <Ionicons name="location-outline" size={20} color={colors.textTertiary} />
-                  <Text style={styles.inputText}>{addressData.province}</Text>
-                </View>
-              </View>
-
-              <Pressable
-                style={({ pressed }) => [
-                  globalStyles.primaryButton,
-                  pressed && globalStyles.buttonPressed,
-                ]}
-                onPress={handleSaveAddress}
-              >
-                <Text style={globalStyles.primaryButtonText}>Guardar Dirección</Text>
-              </Pressable>
-
-              <View style={{ marginTop: 12 }} />
-
-              <Pressable
-                style={({ pressed }) => [
-                  globalStyles.secondaryButton,
-                  pressed && globalStyles.buttonPressed,
-                ]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={globalStyles.secondaryButtonText}>Cancelar</Text>
-              </Pressable>
-
-              <View style={{ marginBottom: 20 }} />
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -408,45 +365,16 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingTop: 8,
   },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginTop: 16,
+    marginBottom: 12,
+  },
   inputText: {
     fontSize: 16,
     color: colors.textSecondary,
-  },
-  addressField: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  addressFieldPressed: {
-    backgroundColor: colors.surfaceHover,
-  },
-  addressContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  addressTextContainer: {
-    flex: 1,
-  },
-  addressName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.textPrimary,
-    marginBottom: 2,
-  },
-  addressPreview: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  addressPlaceholder: {
-    fontSize: 16,
-    color: colors.textTertiary,
   },
   pickerContainer: {
     backgroundColor: colors.surface,
@@ -457,5 +385,6 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 50,
+    color: colors.textPrimary,
   },
 });

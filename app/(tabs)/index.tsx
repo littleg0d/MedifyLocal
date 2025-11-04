@@ -3,8 +3,9 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth } from "../../src/lib/firebase";
-import { signOut } from "firebase/auth";
+import { auth, db } from "../../src/lib/firebase"; 
+import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { globalStyles, colors } from "../../assets/styles";
 
 export default function DashboardHome() {
@@ -12,131 +13,75 @@ export default function DashboardHome() {
   const [userName, setUserName] = useState("Usuario");
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (user) {
-      const name = user.displayName || user.email?.split("@")[0] || "Usuario";
-      setUserName(name.charAt(0).toUpperCase() + name.slice(1));
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.replace("../auth/login");
+        return;
+      }
+  
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        const name = userDoc.exists() 
+          ? userDoc.data().firstName || "Usuario"
+          : user.email?.split("@")[0] || "Usuario";
+        
+        setUserName(name.charAt(0).toUpperCase() + name.slice(1));
+      } catch (error) {
+        console.error("Error al obtener datos:", error);
+        setUserName("Usuario");
+      }
+    });
+    return () => unsubscribe();
   }, []);
-
-  const handleLogout = async () => {
-    Alert.alert(
-      "Cerrar Sesión",
-      "¿Estás seguro que querés salir?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Salir",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await signOut(auth);
-            } catch (error) {
-              console.error("Error al cerrar sesión:", error);
-              Alert.alert("Error", "No pudimos cerrar sesión.");
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleUploadRecipe = () => {
     Alert.alert(
-      "Cargar Receta",
-      "Esta función estará disponible pronto.",
-      [{ text: "Entendido" }]
-    );
-  };
+    "Cargar Receta",
+    "Esta función estará disponible pronto.",
+    [{ text: "Entendido" }]
+        );
+    };
 
-  const handleNotifications = () => {
-    Alert.alert("Notificaciones", "No tenés notificaciones nuevas");
-  };
-
-  return (
+    return (
     <SafeAreaView style={globalStyles.container} edges={["top"]}>
-      <ScrollView style={globalStyles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView style={globalStyles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.greeting}>Hola, {userName}</Text>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.notificationButton,
-              pressed && globalStyles.buttonPressed
-            ]}
-            onPress={handleNotifications}
-          >
-            <Ionicons name="notifications-outline" size={24} color={colors.textSecondary} />
-          </Pressable>
+            <Text style={styles.greeting}>Hola, {userName}</Text>
         </View>
 
-        {/* Botón principal */}
-        <Pressable 
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.primaryButtonPressed
-          ]} 
-          onPress={handleUploadRecipe}
-        >
-          <Ionicons name="camera-outline" size={24} color={colors.textPrimary} />
+    {/* Botón principal */}
+    <Pressable 
+    style={({ pressed }) => [
+    styles.primaryButton,
+    pressed && styles.primaryButtonPressed
+    ]} 
+    onPress={handleUploadRecipe}
+    >
+    <Ionicons name="camera-outline" size={24} color={colors.textPrimary} />
           <Text style={styles.primaryButtonText}>Cargar Nueva Receta</Text>
         </Pressable>
 
-        {/* Sección pedidos */}
-        <View style={styles.section}>
-          <Text style={globalStyles.sectionTitle}>Pedidos Activos</Text>
-          
-          <View style={styles.emptyState}>
-            <View style={globalStyles.iconContainerRound}>
-              <Ionicons name="receipt-outline" size={48} color={colors.gray300} />
-            </View>
-            <Text style={styles.emptyTitle}>No tenés pedidos activos</Text>
-            <Text style={globalStyles.emptyText}>
-              Cargá una receta para comenzar a buscar las mejores opciones
-            </Text>
-          </View>
-        </View>
-
-        {/* Botón de logout */}
-        <Pressable 
-          style={({ pressed }) => [
-            globalStyles.dangerButton,
-            pressed && globalStyles.buttonPressed
-          ]} 
-          onPress={handleLogout}
-        >
-          <Ionicons name="log-out-outline" size={20} color={colors.error} />
-          <Text style={globalStyles.dangerButtonText}>Cerrar Sesión</Text>
-        </Pressable>
-
         <View style={globalStyles.spacer} />
-      </ScrollView>
+    </ScrollView>
     </SafeAreaView>
-  );
+    );
 }
 
 const styles = StyleSheet.create({
-  header: {
+header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 24,
     paddingTop: 8,
-  },
-  greeting: {
+},
+greeting: {
     fontSize: 24,
     fontWeight: "700",
     color: colors.textPrimary,
-  },
-  notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface,
-  },
-  primaryButton: {
+    },
+primaryButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
@@ -150,32 +95,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-  },
-  primaryButtonPressed: {
+    },
+primaryButtonPressed: {
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
-  },
-  primaryButtonText: {
+    },
+primaryButtonText: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.textPrimary,
-  },
-  section: {
-    marginTop: 32,
-  },
-  emptyState: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 32,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: "dashed",
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.gray700,
-    marginBottom: 8,
-  },
+    color: colors.textPrimary, },
 });
