@@ -19,118 +19,11 @@ interface Cotizacion {
   id: string;
   farmaciaId: string;
   nombreComercial: string;
-  cuit: string;
-  email: string;
   direccion: string;
-  distancia?: number;
-  precio: number | null;
+  precio?: number;
   estado: "esperando" | "sin_stock" | "ilegible" | "cotizado";
   fechaCreacion: Date;
 }
-
-// 🔴 DATOS DE PRUEBA
-const COTIZACIONES_PRUEBA: { [key: string]: Cotizacion[] } = {
-  receta_2: [
-    {
-      id: "cot_1",
-      farmaciaId: "farm_1",
-      nombreComercial: "Farmacia del Sol",
-      cuit: "20-12345678-9",
-      email: "contacto@farmaciasol.com",
-      direccion: "Av. Siempre Viva 123",
-      distancia: 1.2,
-      precio: 15.50,
-      estado: "cotizado",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_2",
-      farmaciaId: "farm_2",
-      nombreComercial: "Farmacia Central",
-      cuit: "20-98765432-1",
-      email: "info@farmaciacentral.com",
-      direccion: "Calle Falsa 456",
-      distancia: 2.5,
-      precio: null,
-      estado: "sin_stock",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_3",
-      farmaciaId: "farm_3",
-      nombreComercial: "Farma Vida",
-      cuit: "20-55555555-5",
-      email: "ventas@farmavida.com",
-      direccion: "Bulevar de los Sueños 789",
-      distancia: 3.1,
-      precio: null,
-      estado: "ilegible",
-      fechaCreacion: new Date(),
-    },
-  ],
-  receta_4: [
-    {
-      id: "cot_4",
-      farmaciaId: "farm_1",
-      nombreComercial: "Farmacia del Sol",
-      cuit: "20-12345678-9",
-      email: "contacto@farmaciasol.com",
-      direccion: "Av. Siempre Viva 123",
-      distancia: 1.2,
-      precio: 22.00,
-      estado: "cotizado",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_5",
-      farmaciaId: "farm_4",
-      nombreComercial: "Farmacia La Salud",
-      cuit: "20-44444444-4",
-      email: "hola@lasalud.com",
-      direccion: "Av. Libertador 1500",
-      distancia: 0.8,
-      precio: 18.75,
-      estado: "cotizado",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_6",
-      farmaciaId: "farm_5",
-      nombreComercial: "Farmacia Plus",
-      cuit: "20-33333333-3",
-      email: "ventas@farmplus.com",
-      direccion: "Calle Corrientes 890",
-      distancia: 4.2,
-      precio: null,
-      estado: "esperando",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_7",
-      farmaciaId: "farm_2",
-      nombreComercial: "Farmacia Central",
-      cuit: "20-98765432-1",
-      email: "info@farmaciacentral.com",
-      direccion: "Calle Falsa 456",
-      distancia: 2.5,
-      precio: 25.50,
-      estado: "cotizado",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_8",
-      farmaciaId: "farm_6",
-      nombreComercial: "Farmacia Express",
-      cuit: "20-66666666-6",
-      email: "info@farmexpress.com",
-      direccion: "Av. Santa Fe 2200",
-      distancia: 1.9,
-      precio: null,
-      estado: "sin_stock",
-      fechaCreacion: new Date(),
-    },
-  ],
-};
 
 export default function Solicitudes() {
   const router = useRouter();
@@ -150,11 +43,34 @@ export default function Solicitudes() {
   const loadCotizaciones = async () => {
     try {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 600));
-      const data = COTIZACIONES_PRUEBA[recetaId] || [];
-      setCotizaciones(data);
+
+      console.log("🔍 Cargando cotizaciones para receta:", recetaId);
+
+      // Obtener cotizaciones de la subcollection
+      const cotizacionesRef = collection(db, "recetas", recetaId, "cotizaciones");
+      const querySnapshot = await getDocs(cotizacionesRef);
+
+      console.log("📦 Cotizaciones encontradas:", querySnapshot.size);
+
+      const cotizacionesData: Cotizacion[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        console.log("💊 Cotización:", doc.id, data);
+        cotizacionesData.push({
+          id: doc.id,
+          farmaciaId: data.farmaciaId,
+          nombreComercial: data.nombreComercial,
+          direccion: data.direccion,
+          precio: data.precio, // Solo existe si estado === "cotizado"
+          estado: data.estado,
+          fechaCreacion: data.fechaCreacion.toDate(),
+        });
+      });
+
+      console.log("✅ Cotizaciones cargadas:", cotizacionesData.length);
+      setCotizaciones(cotizacionesData);
     } catch (error) {
-      console.error("Error al cargar cotizaciones:", error);
+      console.error("❌ Error al cargar cotizaciones:", error);
       Alert.alert("Error", "No pudimos cargar las solicitudes.");
     } finally {
       setLoading(false);
@@ -162,14 +78,13 @@ export default function Solicitudes() {
   };
 
   const handlePagar = (cotizacion: Cotizacion) => {
-    Alert.alert(
-      "Ir a pago",
-      `Farmacia: ${cotizacion.nombreComercial}\nPrecio: $${cotizacion.precio}`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Continuar", onPress: () => {} },
-      ]
-    );
+    router.push({
+      pathname: "/(tabs)/pagar",
+      params: {
+        recetaId: recetaId,
+        cotizacionId: cotizacion.id,
+      },
+    });
   };
 
   const getEstadoBadge = (estado: string) => {
@@ -188,7 +103,7 @@ export default function Solicitudes() {
   };
 
   const cotizacionesFiltradas = filtroConStock
-    ? cotizaciones.filter(c => c.estado === "cotizado" && c.precio !== null)
+    ? cotizaciones.filter(c => c.estado === "cotizado")
     : cotizaciones;
 
   if (loading) {
@@ -242,7 +157,7 @@ export default function Solicitudes() {
           <View style={styles.listContainer}>
             {cotizacionesFiltradas.map((cotizacion) => {
               const badge = getEstadoBadge(cotizacion.estado);
-              const tienePrecio = cotizacion.estado === "cotizado" && cotizacion.precio !== null;
+              const tienePrecio = cotizacion.estado === "cotizado";
 
               return (
                 <View key={cotizacion.id} style={globalStyles.card}>
@@ -254,11 +169,6 @@ export default function Solicitudes() {
                       <Text style={styles.farmaciaAddress}>
                         {cotizacion.direccion}
                       </Text>
-                      {cotizacion.distancia && (
-                        <Text style={styles.farmaciaDistance}>
-                          a {cotizacion.distancia.toFixed(1)} km
-                        </Text>
-                      )}
                     </View>
                     <Ionicons name="chevron-forward" size={24} color={colors.textTertiary} />
                   </View>
@@ -347,10 +257,6 @@ const styles = StyleSheet.create({
   farmaciaAddress: {
     fontSize: 16,
     color: colors.textSecondary,
-  },
-  farmaciaDistance: {
-    fontSize: 14,
-    color: colors.textTertiary,
   },
   cardFooter: {
     flexDirection: "row",

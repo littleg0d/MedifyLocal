@@ -1,0 +1,46 @@
+
+
+
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Los usuarios solo pueden leer y escribir su PROPIO documento
+    match /users/{userId} {
+      allow read, update: if request.auth.uid == userId;
+      // Cualquiera puede crear un perfil (al registrarse)
+      allow create: if request.auth.uid != null;
+    }
+
+    // Las farmacias pueden ser leídas por cualquiera (ej. para un mapa)
+    match /farmacias/{farmaciaId} {
+      allow read: if true;
+      // Solo un admin podría crear/editar farmacias (lógica más avanzada)
+      allow write: if false; 
+    }
+
+    // Reglas para recetas
+    match /recetas/{recetaId} {
+      // Un usuario autenticado puede crear una receta
+      allow create: if request.auth.uid != null;
+      
+      // El paciente dueño de la receta puede leerla
+      // Y un usuario logueado que sea 'farmacia' puede leerla
+      allow read: if request.auth.uid == resource.data.pacienteId || 
+                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'farmacia';
+      
+      // El paciente puede actualizar el estado (ej. completada), pero no la imagen
+      allow update: if request.auth.uid == resource.data.pacienteId;
+
+      // Reglas para la subcolección de cotizaciones
+      match /cotizacion/{cotizacionId} {
+        // Solo las farmacias pueden crear cotizaciones
+        allow create: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'farmacia';
+        // Solo la farmacia que cotizó y el paciente pueden leerla
+        allow read: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'farmacia' ||
+                       request.auth.uid == get(/databases/$(database)/documents/recetas/$(recetaId)).data.pacienteId;
+      }
+    }
+  }
+}

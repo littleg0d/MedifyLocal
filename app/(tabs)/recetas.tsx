@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../src/lib/firebase";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { globalStyles, colors } from "../../assets/styles";
+
 interface Receta {
   id: string;
   userId: string;
@@ -23,42 +24,6 @@ interface Receta {
   estado: "esperando_respuestas" | "farmacias_respondiendo" | "finalizada";
   cotizacionesCount: number;
 }
-
-// 🔴 DATOS DE PRUEBA - BORRAR CUANDO FIREBASE ESTÉ LISTO
-const RECETAS_PRUEBA: Receta[] = [
-  {
-    id: "receta_1",
-    userId: "user_test",
-    imagenUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400",
-    fechaCreacion: new Date(2023, 9, 23),
-    estado: "esperando_respuestas",
-    cotizacionesCount: 0,
-  },
-  {
-    id: "receta_2",
-    userId: "user_test",
-    imagenUrl: "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400",
-    fechaCreacion: new Date(2023, 9, 21),
-    estado: "farmacias_respondiendo",
-    cotizacionesCount: 3,
-  },
-  {
-    id: "receta_3",
-    userId: "user_test",
-    imagenUrl: "https://images.unsplash.com/photo-1631549916768-4119b2e5f926?w=400",
-    fechaCreacion: new Date(2023, 9, 15),
-    estado: "esperando_respuestas",
-    cotizacionesCount: 0,
-  },
-  {
-    id: "receta_4",
-    userId: "user_test",
-    imagenUrl: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=400",
-    fechaCreacion: new Date(2023, 9, 10),
-    estado: "farmacias_respondiendo",
-    cotizacionesCount: 5,
-  },
-];
 
 export default function Recetas() {
   const router = useRouter();
@@ -72,8 +37,37 @@ export default function Recetas() {
   const loadRecetas = async () => {
     try {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setRecetas(RECETAS_PRUEBA);
+      const user = auth.currentUser;
+      
+      if (!user) {
+        Alert.alert("Error", "Debes iniciar sesión para ver tus recetas.");
+        return;
+      }
+
+      // Consulta a Firebase
+      const recetasRef = collection(db, "recetas");
+      const q = query(
+        recetasRef,
+        where("userId", "==", user.uid),
+        orderBy("fechaCreacion", "desc")
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      const recetasData: Receta[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        recetasData.push({
+          id: doc.id,
+          userId: data.userId,
+          imagenUrl: data.imagenUrl,
+          fechaCreacion: data.fechaCreacion.toDate(), // Convertir Timestamp a Date
+          estado: data.estado,
+          cotizacionesCount: data.cotizacionesCount,
+        });
+      });
+
+      setRecetas(recetasData);
     } catch (error) {
       console.error("Error al cargar recetas:", error);
       Alert.alert("Error", "No pudimos cargar las recetas.");
@@ -275,3 +269,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
