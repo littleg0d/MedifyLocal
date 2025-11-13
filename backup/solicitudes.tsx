@@ -9,128 +9,52 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Modal,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { db } from "../../src/lib/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { db, auth } from "../../src/lib/firebase";
+import { collection, getDocs, doc, getDoc, query, where, orderBy, limit } from "firebase/firestore";
+import { globalStyles, colors } from "../../assets/styles";
 
-// Tipos de datos
+// ------------------- IMPORTACIONES CENTRALIZADAS -------------------
+import { 
+  PAYMENT_CONFIG, 
+  EstadoPedido,
+  formatearTiempoRestante,
+  recetaEstaBloqueada,
+  calcularEdadPedidoMinutos
+} from "../../src/config/paymentConfig";
+// -----------------------------------------------------------------
+
 interface Cotizacion {
   id: string;
   farmaciaId: string;
   nombreComercial: string;
-  cuit: string;
-  email: string;
   direccion: string;
-  distancia?: number;
-  precio: number | null;
+  precio?: number;
   estado: "esperando" | "sin_stock" | "ilegible" | "cotizado";
   fechaCreacion: Date;
 }
 
-// 🔴 DATOS DE PRUEBA - BORRAR CUANDO FIREBASE ESTÉ LISTO
-const COTIZACIONES_PRUEBA: { [key: string]: Cotizacion[] } = {
-  receta_2: [
-    {
-      id: "cot_1",
-      farmaciaId: "farm_1",
-      nombreComercial: "Farmacia del Sol",
-      cuit: "20-12345678-9",
-      email: "contacto@farmaciasol.com",
-      direccion: "Av. Siempre Viva 123",
-      distancia: 1.2,
-      precio: 15.50,
-      estado: "cotizado",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_2",
-      farmaciaId: "farm_2",
-      nombreComercial: "Farmacia Central",
-      cuit: "20-98765432-1",
-      email: "info@farmaciacentral.com",
-      direccion: "Calle Falsa 456",
-      distancia: 2.5,
-      precio: null,
-      estado: "sin_stock",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_3",
-      farmaciaId: "farm_3",
-      nombreComercial: "Farma Vida",
-      cuit: "20-55555555-5",
-      email: "ventas@farmavida.com",
-      direccion: "Bulevar de los Sueños 789",
-      distancia: 3.1,
-      precio: null,
-      estado: "ilegible",
-      fechaCreacion: new Date(),
-    },
-  ],
-  receta_4: [
-    {
-      id: "cot_4",
-      farmaciaId: "farm_1",
-      nombreComercial: "Farmacia del Sol",
-      cuit: "20-12345678-9",
-      email: "contacto@farmaciasol.com",
-      direccion: "Av. Siempre Viva 123",
-      distancia: 1.2,
-      precio: 22.00,
-      estado: "cotizado",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_5",
-      farmaciaId: "farm_4",
-      nombreComercial: "Farmacia La Salud",
-      cuit: "20-44444444-4",
-      email: "hola@lasalud.com",
-      direccion: "Av. Libertador 1500",
-      distancia: 0.8,
-      precio: 18.75,
-      estado: "cotizado",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_6",
-      farmaciaId: "farm_5",
-      nombreComercial: "Farmacia Plus",
-      cuit: "20-33333333-3",
-      email: "ventas@farmplus.com",
-      direccion: "Calle Corrientes 890",
-      distancia: 4.2,
-      precio: null,
-      estado: "esperando",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_7",
-      farmaciaId: "farm_2",
-      nombreComercial: "Farmacia Central",
-      cuit: "20-98765432-1",
-      email: "info@farmaciacentral.com",
-      direccion: "Calle Falsa 456",
-      distancia: 2.5,
-      precio: 25.50,
-      estado: "cotizado",
-      fechaCreacion: new Date(),
-    },
-    {
-      id: "cot_8",
-      farmaciaId: "farm_6",
-      nombreComercial: "Farmacia Express",
-      cuit: "20-66666666-6",
-      email: "info@farmexpress.com",
-      direccion: "Av. Santa Fe 2200",
-      distancia: 1.9,
-      precio: null,
-      estado: "sin_stock",
-      fechaCreacion: new Date(),
-    },
-  ],
-};
+interface Farmacia {
+  id: string;
+  nombreComercial: string;
+  direccion: string;
+  telefono?: string;
+  email?: string;
+  horario?: string;
+}
+
+interface PedidoActivoReceta {
+  id: string;
+  estado: EstadoPedido;
+  cotizacionId: string;
+  nombreComercialFarmacia: string;
+  precio: number;
+  fechaCreacion: Date;
+  paymentId?: string;
+}
 
 export default function Solicitudes() {
   const router = useRouter();
@@ -140,223 +64,357 @@ export default function Solicitudes() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroConStock, setFiltroConStock] = useState(false);
+  const [farmaciaSeleccionada, setFarmaciaSeleccionada] = useState<Farmacia | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  
+  const [pedidoActivoReceta, setPedidoActivoReceta] = useState<PedidoActivoReceta | null>(null);
+  const [recetaBloqueada, setRecetaBloqueada] = useState(false);
+  
+  // Contador en tiempo real (fuerza re-render cada segundo)
+  const [, setContadorActualizado] = useState(0);
 
   useEffect(() => {
     if (recetaId) {
-      loadCotizaciones();
+      loadDatos();
     }
   }, [recetaId]);
 
-  const loadCotizaciones = async () => {
+  // Contador en tiempo real
+  useEffect(() => {
+    if (!pedidoActivoReceta) return;
+
+    const intervalo = setInterval(() => {
+      setContadorActualizado(prev => prev + 1);
+    }, PAYMENT_CONFIG.INTERVALO_ACTUALIZACION_CONTADOR * 1000);
+
+    return () => clearInterval(intervalo);
+  }, [pedidoActivoReceta]);
+
+  const loadDatos = async () => {
     try {
       setLoading(true);
-      
-      // 🔴 COMENTAR ESTO Y USAR DATOS DE PRUEBA
-      // const cotizacionesRef = collection(db, "recetas", recetaId, "cotizaciones");
-      // const snapshot = await getDocs(cotizacionesRef);
-      
-      // const data = snapshot.docs.map(doc => {
-      //   const d = doc.data();
-      //   return {
-      //     id: doc.id,
-      //     farmaciaId: d.farmaciaId || "",
-      //     nombreComercial: d.nombreComercial || "Farmacia",
-      //     cuit: d.cuit || "",
-      //     email: d.email || "",
-      //     direccion: d.direccion || "Sin dirección",
-      //     distancia: d.distancia,
-      //     precio: d.precio || null,
-      //     estado: d.estado || "esperando",
-      //     fechaCreacion: d.fechaCreacion?.toDate() || new Date(),
-      //   };
-      // });
-
-      // setCotizaciones(data);
-
-      // 🔴 USAR DATOS DE PRUEBA
-      await new Promise(resolve => setTimeout(resolve, 600)); // Simular carga
-      const data = COTIZACIONES_PRUEBA[recetaId] || [];
-      setCotizaciones(data);
+      const bloqueo = await verificarBloqueoReceta();
+      await loadCotizaciones();
+      console.log("✅ Datos cargados. Receta bloqueada:", bloqueo);
     } catch (error) {
-      console.error("Error al cargar cotizaciones:", error);
+      console.error("❌ Error al cargar datos:", error);
       Alert.alert("Error", "No pudimos cargar las solicitudes.");
     } finally {
       setLoading(false);
     }
   };
 
+  const verificarBloqueoReceta = async (): Promise<boolean> => {
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) return false;
+
+      const pedidosRef = collection(db, "pedidos");
+      const q = query(
+        pedidosRef,
+        where("userId", "==", userId),
+        where("recetaId", "==", recetaId),
+        orderBy("fechaCreacion", "desc"),
+        limit(1)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const pedidoDoc = querySnapshot.docs[0];
+        const pedidoData = pedidoDoc.data();
+        
+        const fechaCreacion = pedidoData.fechaCreacion.toDate();
+        const edadMinutos = calcularEdadPedidoMinutos(fechaCreacion);
+        const estado = pedidoData.estado as EstadoPedido;
+
+        const debeBloquear = recetaEstaBloqueada(estado, edadMinutos);
+
+        if (debeBloquear) {
+          setPedidoActivoReceta({
+            id: pedidoDoc.id,
+            estado,
+            cotizacionId: pedidoData.cotizacionId,
+            nombreComercialFarmacia: pedidoData.nombreComercial || "Farmacia",
+            precio: pedidoData.precio,
+            fechaCreacion,
+            paymentId: pedidoData.paymentId,
+          });
+          setRecetaBloqueada(true);
+          return true;
+        }
+      }
+      
+      setPedidoActivoReceta(null);
+      setRecetaBloqueada(false);
+      return false;
+    } catch (error) {
+      console.error("Error verificando bloqueo:", error);
+      return false;
+    }
+  };
+
+  const loadCotizaciones = async () => {
+    try {
+      const cotizacionesRef = collection(db, "recetas", recetaId, "cotizaciones");
+      const querySnapshot = await getDocs(cotizacionesRef);
+
+      const cotizacionesData: Cotizacion[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        cotizacionesData.push({
+          id: doc.id,
+          farmaciaId: data.farmaciaId,
+          nombreComercial: data.nombreComercial,
+          direccion: data.direccion,
+          precio: data.precio,
+          estado: data.estado,
+          fechaCreacion: data.fechaCreacion.toDate(),
+        });
+      });
+
+      setCotizaciones(cotizacionesData);
+    } catch (error) {
+      console.error("❌ Error al cargar cotizaciones:", error);
+      throw error;
+    }
+  };
+
   const handlePagar = (cotizacion: Cotizacion) => {
-    // Navegar a pantalla de pago
-    Alert.alert(
-      "Ir a pago",
-      `Farmacia: ${cotizacion.nombreComercial}\nPrecio: $${cotizacion.precio}`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Continuar",
-          onPress: () => {
-            // router.push({
-            //   pathname: "/pago",
-            //   params: {
-            //     recetaId,
-            //     cotizacionId: cotizacion.id,
-            //     farmaciaId: cotizacion.farmaciaId,
-            //     precio: cotizacion.precio?.toString() || "0",
-            //   },
-            // });
-          },
-        },
-      ]
-    );
+    if (recetaBloqueada && pedidoActivoReceta) {
+      const { estado, nombreComercialFarmacia } = pedidoActivoReceta;
+      const edadMinutos = calcularEdadPedidoMinutos(pedidoActivoReceta.fechaCreacion);
+      
+      if (estado === 'pagado') {
+        Alert.alert(
+          "Ya pagaste esta receta",
+          `Ya compraste este medicamento en ${nombreComercialFarmacia}. Puedes ver el estado en 'Mis Pedidos'.`,
+          [
+            { text: "Cancelar", style: "cancel" },
+            { text: "Ver Pedidos", onPress: () => router.push("/(tabs)/pedidos") }
+          ]
+        );
+      } else {
+        const minutosRestantes = Math.max(0, Math.ceil(PAYMENT_CONFIG.MINUTOS_EXPIRACION_PAGO - edadMinutos));
+        Alert.alert(
+          "Pago en Proceso",
+          `Ya tienes un pago en proceso para esta receta en ${nombreComercialFarmacia}.\n\nPor favor espera ${minutosRestantes} minuto${minutosRestantes !== 1 ? 's' : ''} más o verifica el estado del pago.`,
+          [
+            { text: "Entendido", style: "cancel" },
+            { text: "Ver Estado", onPress: () => router.push("/(tabs)/pedidos") }
+          ]
+        );
+      }
+      return;
+    }
+
+    router.push({
+      pathname: "/pagar",
+      params: {
+        recetaId: recetaId,
+        cotizacionId: cotizacion.id,
+      },
+    });
+  };
+
+  const handleVerDetalles = async (farmaciaId: string) => {
+    try {
+      const farmaciaRef = doc(db, "farmacias", farmaciaId);
+      const farmaciaSnap = await getDoc(farmaciaRef);
+
+      if (farmaciaSnap.exists()) {
+        const data = farmaciaSnap.data();
+        setFarmaciaSeleccionada({
+          id: farmaciaSnap.id,
+          nombreComercial: data.nombreComercial,
+          direccion: data.direccion,
+          telefono: data.telefono,
+          email: data.email,
+          horario: data.horario,
+        });
+        setModalVisible(true);
+      } else {
+        Alert.alert("Error", "No se encontraron los detalles de la farmacia");
+      }
+    } catch (error) {
+      console.error("❌ Error al cargar farmacia:", error);
+      Alert.alert("Error", "No pudimos cargar los detalles");
+    }
+  };
+
+  const handleLlamar = (telefono?: string) => {
+    if (telefono) Linking.openURL(`tel:${telefono}`);
+  };
+
+  const handleEmail = (email?: string) => {
+    if (email) Linking.openURL(`mailto:${email}`);
   };
 
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case "esperando":
-        return {
-          bg: "#FEF3C7",
-          text: "#92400E",
-          label: "Esperando respuesta",
-        };
+        return { bg: colors.warning, text: colors.warningDark, label: "Esperando respuesta" };
       case "cotizado":
-        return {
-          bg: "#D1FAE5",
-          text: "#065F46",
-          label: "Disponible",
-        };
+        return { bg: colors.successLight, text: colors.successDark, label: "Disponible" };
       case "sin_stock":
-        return {
-          bg: "#E5E7EB",
-          text: "#374151",
-          label: "Sin stock",
-        };
+        return { bg: colors.gray200, text: colors.gray700, label: "Sin stock" };
       case "ilegible":
-        return {
-          bg: "#FEE2E2",
-          text: "#991B1B",
-          label: "Rechazada",
-        };
+        return { bg: colors.errorLight, text: colors.errorDark, label: "Rechazada" };
       default:
-        return {
-          bg: "#F3F4F6",
-          text: "#6B7280",
-          label: "Desconocido",
-        };
+        return { bg: colors.gray100, text: colors.textSecondary, label: "Desconocido" };
     }
   };
 
+  const getEstadoPedidoConfig = (estado: EstadoPedido) => {
+    const configs = {
+      pagado: { icon: "checkmark-circle", color: colors.successDark, bg: colors.successLight, label: "Ya Pagado" },
+      pendiente_de_pago: { icon: "time", color: colors.warningDark, bg: colors.warning, label: "Pago en Proceso" },
+      pendiente: { icon: "sync", color: colors.primary, bg: colors.primaryLight, label: "En Revisión" },
+      rechazado: { icon: "close-circle", color: colors.errorDark, bg: colors.errorLight, label: "Rechazado" },
+      cancelado: { icon: "close-circle", color: colors.textSecondary, bg: colors.gray200, label: "Cancelado" },
+      abandonada: { icon: "alert-circle", color: colors.warningDark, bg: colors.warning, label: "Abandonado" },
+    };
+
+    return configs[estado] || { icon: "help-circle", color: colors.textSecondary, bg: colors.gray200, label: "Desconocido" };
+  };
+
   const cotizacionesFiltradas = filtroConStock
-    ? cotizaciones.filter(c => c.estado === "cotizado" && c.precio !== null)
+    ? cotizaciones.filter(c => c.estado === "cotizado")
     : cotizaciones;
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#22C55E" />
-          <Text style={styles.loadingText}>Cargando solicitudes...</Text>
+      <SafeAreaView style={globalStyles.container}>
+        <View style={globalStyles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={globalStyles.loadingText}>Cargando solicitudes...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+    <SafeAreaView style={globalStyles.container} edges={["top"]}>
+      <View style={globalStyles.headerWithBorder}>
+        <Pressable onPress={() => router.push("/(tabs)/recetas")} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={styles.title}>Farmacias Cercanas</Text>
-        <View style={{ width: 40 }} />
+        <Text style={globalStyles.titleSmall}>Farmacias Cercanas</Text>
+        <Pressable onPress={() => loadDatos()} style={styles.refreshButton}>
+          <Ionicons name="refresh" size={24} color={colors.textPrimary} />
+        </Pressable>
       </View>
 
-      {/* Filtro */}
+      {recetaBloqueada && pedidoActivoReceta && (
+        <View style={[styles.bloqueoRecetaBanner, { backgroundColor: getEstadoPedidoConfig(pedidoActivoReceta.estado).bg }]}>
+          <View style={styles.bloqueoHeader}>
+            <Ionicons 
+              name={getEstadoPedidoConfig(pedidoActivoReceta.estado).icon as any}
+              size={28} 
+              color={getEstadoPedidoConfig(pedidoActivoReceta.estado).color}
+            />
+            <View style={styles.bloqueoInfo}>
+              <Text style={[styles.bloqueoTitulo, { color: getEstadoPedidoConfig(pedidoActivoReceta.estado).color }]}>
+                {getEstadoPedidoConfig(pedidoActivoReceta.estado).label}
+              </Text>
+              <Text style={[styles.bloqueoSubtitulo, { color: getEstadoPedidoConfig(pedidoActivoReceta.estado).color }]}>
+                {pedidoActivoReceta.estado === 'pagado' 
+                  ? `Ya compraste en ${pedidoActivoReceta.nombreComercialFarmacia}`
+                  : `Farmacia: ${pedidoActivoReceta.nombreComercialFarmacia}`
+                }
+              </Text>
+            </View>
+          </View>
+
+          {pedidoActivoReceta.estado !== 'pagado' && (
+            <View style={styles.contadorContainer}>
+              <Ionicons name="timer-outline" size={20} color={getEstadoPedidoConfig(pedidoActivoReceta.estado).color} />
+              <Text style={[styles.contadorTexto, { color: getEstadoPedidoConfig(pedidoActivoReceta.estado).color }]}>
+                Tiempo restante: {formatearTiempoRestante(pedidoActivoReceta.fechaCreacion)}
+              </Text>
+            </View>
+          )}
+
+          <Pressable style={styles.verEstadoButton} onPress={() => router.push("/(tabs)/pedidos")}>
+            <Text style={[styles.verEstadoButtonText, { color: getEstadoPedidoConfig(pedidoActivoReceta.estado).color }]}>
+              {pedidoActivoReceta.estado === 'pagado' ? 'Ver en Mis Pedidos' : 'Ver Estado del Pago'}
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={getEstadoPedidoConfig(pedidoActivoReceta.estado).color} />
+          </Pressable>
+        </View>
+      )}
+
       <View style={styles.filterContainer}>
         <Text style={styles.filterLabel}>Mostrar solo con stock</Text>
         <Pressable
-          style={[styles.toggle, filtroConStock && styles.toggleActive]}
+          style={[globalStyles.toggle, filtroConStock && globalStyles.toggleActive]}
           onPress={() => setFiltroConStock(!filtroConStock)}
         >
-          <View
-            style={[
-              styles.toggleThumb,
-              filtroConStock && styles.toggleThumbActive,
-            ]}
-          />
+          <View style={[globalStyles.toggleThumb, filtroConStock && globalStyles.toggleThumbActive]} />
         </Pressable>
       </View>
 
       <ScrollView style={styles.scrollView}>
         {cotizacionesFiltradas.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="file-tray-outline" size={64} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>Sin solicitudes</Text>
-            <Text style={styles.emptyText}>
-              {filtroConStock
-                ? "No hay farmacias con stock disponible aún"
-                : "Aún no hay respuestas de farmacias"}
+          <View style={globalStyles.emptyContainer}>
+            <Ionicons name="file-tray-outline" size={64} color={colors.textTertiary} />
+            <Text style={globalStyles.emptyTitle}>Sin solicitudes</Text>
+            <Text style={globalStyles.emptyText}>
+              {filtroConStock ? "No hay farmacias con stock disponible aún" : "Aún no hay respuestas de farmacias"}
             </Text>
           </View>
         ) : (
           <View style={styles.listContainer}>
             {cotizacionesFiltradas.map((cotizacion) => {
               const badge = getEstadoBadge(cotizacion.estado);
-              const tienePrecio = cotizacion.estado === "cotizado" && cotizacion.precio !== null;
+              const tienePrecio = cotizacion.estado === "cotizado";
+              const esCotizacionActiva = pedidoActivoReceta?.cotizacionId === cotizacion.id;
 
               return (
-                <View key={cotizacion.id} style={styles.card}>
+                <View key={cotizacion.id} style={globalStyles.card}>
                   <View style={styles.cardHeader}>
                     <View style={styles.cardInfo}>
-                      <Text style={styles.farmaciaName}>
-                        {cotizacion.nombreComercial}
-                      </Text>
-                      <Text style={styles.farmaciaAddress}>
-                        {cotizacion.direccion}
-                      </Text>
-                      {cotizacion.distancia && (
-                        <Text style={styles.farmaciaDistance}>
-                          a {cotizacion.distancia.toFixed(1)} km
-                        </Text>
-                      )}
+                      <Text style={styles.farmaciaName}>{cotizacion.nombreComercial}</Text>
+                      <Text style={styles.farmaciaAddress}>{cotizacion.direccion}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+                    <Pressable onPress={() => handleVerDetalles(cotizacion.farmaciaId)} style={styles.detailsButton}>
+                      <Ionicons name="chevron-forward" size={24} color={colors.textTertiary} />
+                    </Pressable>
                   </View>
+
+                  {esCotizacionActiva && recetaBloqueada && (
+                    <View style={styles.cotizacionActivaBadge}>
+                      <Ionicons name="radio-button-on" size={16} color={colors.primary} />
+                      <Text style={styles.cotizacionActivaTexto}>Pedido en curso</Text>
+                    </View>
+                  )}
 
                   <View style={styles.cardFooter}>
                     {tienePrecio ? (
                       <>
-                        <View
-                          style={[
-                            styles.badge,
-                            { backgroundColor: badge.bg },
-                          ]}
-                        >
-                          <Text style={[styles.badgeText, { color: badge.text }]}>
+                        <View style={[globalStyles.badgePill, { backgroundColor: badge.bg, flex: 1 }]}>
+                          <Text style={[globalStyles.badgeTextMedium, { color: badge.text }]}>
                             Disponible: ${cotizacion.precio?.toFixed(2)}
                           </Text>
                         </View>
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.payButton,
-                            pressed && styles.buttonPressed,
-                          ]}
-                          onPress={() => handlePagar(cotizacion)}
-                        >
-                          <Text style={styles.payButtonText}>Pagar</Text>
-                        </Pressable>
+                        
+                        {recetaBloqueada ? (
+                          <View style={[styles.payButton, styles.disabledButton]}>
+                            <Ionicons name="lock-closed" size={16} color={colors.surface} />
+                            <Text style={styles.payButtonText}>Bloqueado</Text>
+                          </View>
+                        ) : (
+                          <Pressable
+                            style={({ pressed }) => [styles.payButton, pressed && globalStyles.buttonPressed]}
+                            onPress={() => handlePagar(cotizacion)}
+                          >
+                            <Text style={styles.payButtonText}>Pagar</Text>
+                          </Pressable>
+                        )}
                       </>
                     ) : (
-                      <View
-                        style={[
-                          styles.badge,
-                          styles.badgeFull,
-                          { backgroundColor: badge.bg },
-                        ]}
-                      >
-                        <Text style={[styles.badgeText, { color: badge.text }]}>
-                          {badge.label}
-                        </Text>
+                      <View style={[globalStyles.badgePill, styles.badgeFull, { backgroundColor: badge.bg }]}>
+                        <Text style={[globalStyles.badgeTextMedium, { color: badge.text }]}>{badge.label}</Text>
                       </View>
                     )}
                   </View>
@@ -366,180 +424,116 @@ export default function Solicitudes() {
           </View>
         )}
 
-        {/* Espaciado para el tab bar */}
-        <View style={{ height: 80 }} />
+        <View style={globalStyles.spacer} />
       </ScrollView>
+
+      <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detalles de Farmacia</Text>
+              <Pressable onPress={() => setModalVisible(false)} style={styles.closeButton}>
+                <Ionicons name="close" size={28} color={colors.textPrimary} />
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.detailSection}>
+                <Ionicons name="storefront" size={24} color={colors.primary} />
+                <View style={styles.detailText}>
+                  <Text style={styles.detailLabel}>Nombre</Text>
+                  <Text style={styles.detailValue}>{farmaciaSeleccionada?.nombreComercial}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailSection}>
+                <Ionicons name="location" size={24} color={colors.primary} />
+                <View style={styles.detailText}>
+                  <Text style={styles.detailLabel}>Dirección</Text>
+                  <Text style={styles.detailValue}>{farmaciaSeleccionada?.direccion}</Text>
+                </View>
+              </View>
+
+              {farmaciaSeleccionada?.telefono && (
+                <Pressable style={styles.detailSection} onPress={() => handleLlamar(farmaciaSeleccionada.telefono)}>
+                  <Ionicons name="call" size={24} color={colors.primary} />
+                  <View style={styles.detailText}>
+                    <Text style={styles.detailLabel}>Teléfono</Text>
+                    <Text style={[styles.detailValue, styles.linkText]}>{farmaciaSeleccionada.telefono}</Text>
+                  </View>
+                </Pressable>
+              )}
+
+              {farmaciaSeleccionada?.email && (
+                <Pressable style={styles.detailSection} onPress={() => handleEmail(farmaciaSeleccionada.email)}>
+                  <Ionicons name="mail" size={24} color={colors.primary} />
+                  <View style={styles.detailText}>
+                    <Text style={styles.detailLabel}>Email</Text>
+                    <Text style={[styles.detailValue, styles.linkText]}>{farmaciaSeleccionada.email}</Text>
+                  </View>
+                </Pressable>
+              )}
+
+              {farmaciaSeleccionada?.horario && (
+                <View style={styles.detailSection}>
+                  <Ionicons name="time" size={24} color={colors.primary} />
+                  <View style={styles.detailText}>
+                    <Text style={styles.detailLabel}>Horario</Text>
+                    <Text style={styles.detailValue}>{farmaciaSeleccionada.horario}</Text>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            <Pressable style={styles.modalButton} onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalButtonText}>Cerrar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F6F8F7",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    color: "#6B7280",
-    fontSize: 16,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#F6F8F7",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  filterContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#F6F8F7",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-  },
-  filterLabel: {
-    fontSize: 16,
-    color: "#111827",
-  },
-  toggle: {
-    width: 51,
-    height: 31,
-    borderRadius: 16,
-    backgroundColor: "#D1D5DB",
-    padding: 2,
-    justifyContent: "center",
-  },
-  toggleActive: {
-    backgroundColor: "#22C55E",
-    justifyContent: "flex-end",
-  },
-  toggleThumb: {
-    width: 27,
-    height: 27,
-    borderRadius: 14,
-    backgroundColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  toggleThumbActive: {
-    alignSelf: "flex-end",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 80,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#374151",
-    marginTop: 16,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginTop: 8,
-    textAlign: "center",
-    paddingHorizontal: 32,
-  },
-  listContainer: {
-    padding: 16,
-    gap: 16,
-  },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
-  },
-  cardInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  farmaciaName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  farmaciaAddress: {
-    fontSize: 16,
-    color: "#6B7280",
-  },
-  farmaciaDistance: {
-    fontSize: 14,
-    color: "#9CA3AF",
-  },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  badge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    flex: 1,
-  },
-  badgeFull: {
-    alignItems: "center",
-  },
-  badgeText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  payButton: {
-    backgroundColor: "#22C55E",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
-    flex: 1,
-    alignItems: "center",
-  },
-  payButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  buttonPressed: {
-    opacity: 0.7,
-  },
+  backButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  refreshButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  bloqueoRecetaBanner: { padding: 16, marginHorizontal: 16, marginTop: 12, marginBottom: 8, borderRadius: 12, gap: 12 },
+  bloqueoHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  bloqueoInfo: { flex: 1, gap: 4 },
+  bloqueoTitulo: { fontSize: 18, fontWeight: "700" },
+  bloqueoSubtitulo: { fontSize: 14, fontWeight: "500" },
+  contadorContainer: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.1)" },
+  contadorTexto: { fontSize: 16, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  verEstadoButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: "rgba(255,255,255,0.3)", borderRadius: 8 },
+  verEstadoButtonText: { fontSize: 15, fontWeight: "600" },
+  filterContainer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.background, borderBottomWidth: 1, borderBottomColor: colors.border },
+  filterLabel: { fontSize: 16, color: colors.textPrimary },
+  scrollView: { flex: 1 },
+  listContainer: { padding: 16, gap: 16 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
+  cardInfo: { flex: 1, gap: 4 },
+  farmaciaName: { fontSize: 18, fontWeight: "700", color: colors.textPrimary },
+  farmaciaAddress: { fontSize: 16, color: colors.textSecondary },
+  detailsButton: { padding: 4 },
+  cotizacionActivaBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.primaryLight, borderRadius: 6, alignSelf: "flex-start", marginBottom: 12 },
+  cotizacionActivaTexto: { fontSize: 13, fontWeight: "600", color: colors.primary },
+  cardFooter: { flexDirection: "row", alignItems: "center", gap: 12 },
+  badgeFull: { alignItems: "center", flex: 1 },
+  payButton: { backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20, flex: 1, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 6 },
+  payButtonText: { color: colors.surface, fontSize: 16, fontWeight: "700" },
+  disabledButton: { backgroundColor: colors.textSecondary, opacity: 0.7 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, maxHeight: "80%" },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+  modalTitle: { fontSize: 22, fontWeight: "700", color: colors.textPrimary },
+  closeButton: { padding: 4 },
+  modalBody: { padding: 20 },
+  detailSection: { flexDirection: "row", alignItems: "flex-start", gap: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+  detailText: { flex: 1, gap: 4 },
+  detailLabel: { fontSize: 14, color: colors.textSecondary, fontWeight: "600" },
+  detailValue: { fontSize: 16, color: colors.textPrimary },
+  linkText: { color: colors.primary, textDecorationLine: "underline" },
+  modalButton: { backgroundColor: colors.primary, marginHorizontal: 20, marginVertical: 20, paddingVertical: 16, borderRadius: 12, alignItems: "center" },
+  modalButtonText: { color: colors.surface, fontSize: 16, fontWeight: "700" },
 });

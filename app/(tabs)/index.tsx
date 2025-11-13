@@ -1,7 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Pressable, 
+  ScrollView, 
+  Alert,
+  ActivityIndicator 
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../src/lib/firebase"; 
 import { doc, getDoc } from "firebase/firestore";
@@ -10,7 +18,8 @@ import { globalStyles, colors } from "../../assets/styles";
 
 export default function DashboardHome() {
   const router = useRouter();
-  const [userName, setUserName] = useState("Usuario");
+  const [userName, setUserName] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -31,57 +40,68 @@ export default function DashboardHome() {
       } catch (error) {
         console.error("Error al obtener datos:", error);
         setUserName("Usuario");
+      } finally {
+        setLoading(false);
       }
     });
+    
     return () => unsubscribe();
   }, []);
-  const handleUploadRecipe = () => {
-    Alert.alert(
-    "Cargar Receta",
-    "Esta función estará disponible pronto.",
-    [{ text: "Entendido" }]
-        );
-    };
 
+  const handleUploadRecipe = () => {
+    router.push("/cargarReceta");
+  };
+
+  if (loading) {
     return (
+      <SafeAreaView style={globalStyles.container}>
+        <View style={globalStyles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={globalStyles.loadingText}>Cargando...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
     <SafeAreaView style={globalStyles.container} edges={["top"]}>
-        <ScrollView style={globalStyles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView style={globalStyles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-            <Text style={styles.greeting}>Hola, {userName}</Text>
+          <Text style={styles.greeting}>Hola, {userName}</Text>
         </View>
 
-    {/* Botón principal */}
-    <Pressable 
-    style={({ pressed }) => [
-    styles.primaryButton,
-    pressed && styles.primaryButtonPressed
-    ]} 
-    onPress={handleUploadRecipe}
-    >
-    <Ionicons name="camera-outline" size={24} color={colors.textPrimary} />
+        {/* Botón principal */}
+        <Pressable 
+          style={({ pressed }) => [
+            styles.primaryButton,
+            pressed && styles.primaryButtonPressed
+          ]} 
+          onPress={handleUploadRecipe}
+        >
+          <Ionicons name="camera-outline" size={24} color={colors.textPrimary} />
           <Text style={styles.primaryButtonText}>Cargar Nueva Receta</Text>
         </Pressable>
 
         <View style={globalStyles.spacer} />
-    </ScrollView>
+      </ScrollView>
     </SafeAreaView>
-    );
+  );
 }
 
 const styles = StyleSheet.create({
-header: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 24,
     paddingTop: 8,
-},
-greeting: {
+  },
+  greeting: {
     fontSize: 24,
     fontWeight: "700",
     color: colors.textPrimary,
-    },
-primaryButton: {
+  },
+  primaryButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
@@ -95,13 +115,14 @@ primaryButton: {
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-    },
-primaryButtonPressed: {
+  },
+  primaryButtonPressed: {
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
-    },
-primaryButtonText: {
+  },
+  primaryButtonText: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.textPrimary, },
+    color: colors.textPrimary,
+  },
 });

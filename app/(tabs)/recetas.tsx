@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../src/lib/firebase";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { globalStyles, colors } from "../../assets/styles";
 
 interface Receta {
@@ -31,50 +31,53 @@ export default function Recetas() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadRecetas();
-  }, []);
-
-  const loadRecetas = async () => {
-    try {
-      setLoading(true);
-      const user = auth.currentUser;
-      
-      if (!user) {
-        Alert.alert("Error", "Debes iniciar sesión para ver tus recetas.");
-        return;
-      }
-
-      // Consulta a Firebase
-      const recetasRef = collection(db, "recetas");
-      const q = query(
-        recetasRef,
-        where("userId", "==", user.uid),
-        orderBy("fechaCreacion", "desc")
-      );
-      
-      const querySnapshot = await getDocs(q);
-      
-      const recetasData: Receta[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        recetasData.push({
-          id: doc.id,
-          userId: data.userId,
-          imagenUrl: data.imagenUrl,
-          fechaCreacion: data.fechaCreacion.toDate(), // Convertir Timestamp a Date
-          estado: data.estado,
-          cotizacionesCount: data.cotizacionesCount,
-        });
-      });
-
-      setRecetas(recetasData);
-    } catch (error) {
-      console.error("Error al cargar recetas:", error);
-      Alert.alert("Error", "No pudimos cargar las recetas.");
-    } finally {
+    const user = auth.currentUser;
+    
+    if (!user) {
+      Alert.alert("Error", "Debes iniciar sesión para ver tus recetas.");
       setLoading(false);
+      return;
     }
-  };
+
+    // Consulta a Firebase con onSnapshot para escuchar cambios en tiempo real
+    const recetasRef = collection(db, "recetas");
+    const q = query(
+      recetasRef,
+      where("userId", "==", user.uid),
+      orderBy("fechaCreacion", "desc")
+    );
+    
+    // Suscripción en tiempo real
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const recetasData: Receta[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          recetasData.push({
+            id: doc.id,
+            userId: data.userId,
+            imagenUrl: data.imagenUrl,
+            fechaCreacion: data.fechaCreacion.toDate(),
+            estado: data.estado,
+            cotizacionesCount: data.cotizacionesCount || 0,
+          });
+        });
+
+        setRecetas(recetasData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error al escuchar recetas:", error);
+        Alert.alert("Error", "No pudimos cargar las recetas.");
+        setLoading(false);
+      }
+    );
+
+    // Cleanup: desuscribirse cuando el componente se desmonte
+    return () => unsubscribe();
+  }, []);
 
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
@@ -116,7 +119,7 @@ export default function Recetas() {
 
   const handleVerSolicitudes = (recetaId: string) => {
     router.push({
-      pathname: "/(tabs)/solicitudes",
+      pathname: "/solicitudes",
       params: { recetaId },
     });
   };
@@ -269,4 +272,3 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
-

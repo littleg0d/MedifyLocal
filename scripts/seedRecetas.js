@@ -25,9 +25,80 @@ const IMAGENES_RECETAS = [
 
 async function seedRecetas() {
   try {
-    console.log("🚀 Iniciando seed de recetas...");
+    console.log("🚀 Iniciando seed...");
 
     const USER_ID = "jdIDKuPYy0ZumjxrRWHZt0ORE0H3";
+
+    // ========== CREAR FARMACIAS ==========
+    console.log("\n🏥 Creando farmacias...");
+    
+    const farm1Ref = await addDoc(collection(db, "farmacias"), {
+      nombreComercial: "Farmacia del Sol",
+      direccion: "Av. Siempre Viva 123",
+      telefono: "11-4444-5555",
+      email: "contacto@farmaciasol.com",
+      horario: "Lun-Vie: 8:00-20:00, Sáb: 9:00-14:00",
+      activa: true,
+      fechaRegistro: new Date(2024, 0, 15),
+    });
+    console.log(`  ✅ Farmacia del Sol: ${farm1Ref.id}`);
+
+    const farm2Ref = await addDoc(collection(db, "farmacias"), {
+      nombreComercial: "Farmacia Central",
+      direccion: "Calle Falsa 456",
+      telefono: "11-5555-6666",
+      email: "info@farmaciacentral.com",
+      horario: "24 horas",
+      activa: true,
+      fechaRegistro: new Date(2024, 1, 10),
+    });
+    console.log(`  ✅ Farmacia Central: ${farm2Ref.id}`);
+
+    const farm3Ref = await addDoc(collection(db, "farmacias"), {
+      nombreComercial: "Farma Vida",
+      direccion: "Bulevar de los Sueños 789",
+      telefono: "11-6666-7777",
+      email: "ventas@farmavida.com",
+      horario: "Lun-Dom: 9:00-21:00",
+      activa: true,
+      fechaRegistro: new Date(2024, 2, 5),
+    });
+    console.log(`  ✅ Farma Vida: ${farm3Ref.id}`);
+
+    const farm4Ref = await addDoc(collection(db, "farmacias"), {
+      nombreComercial: "Farmacia La Salud",
+      direccion: "Av. Libertador 1500",
+      telefono: "11-7777-8888",
+      email: "contacto@lasalud.com",
+      horario: "Lun-Vie: 8:30-19:30, Sáb: 9:00-13:00",
+      activa: true,
+      fechaRegistro: new Date(2024, 3, 20),
+    });
+    console.log(`  ✅ Farmacia La Salud: ${farm4Ref.id}`);
+
+    const farm5Ref = await addDoc(collection(db, "farmacias"), {
+      nombreComercial: "Farmacia Plus",
+      direccion: "Calle Corrientes 890",
+      telefono: "11-8888-9999",
+      email: "info@farmaciaplus.com",
+      horario: "24 horas",
+      activa: true,
+      fechaRegistro: new Date(2024, 4, 12),
+    });
+    console.log(`  ✅ Farmacia Plus: ${farm5Ref.id}`);
+
+    const farm6Ref = await addDoc(collection(db, "farmacias"), {
+      nombreComercial: "Farmacia Express",
+      direccion: "Av. Santa Fe 2200",
+      telefono: "11-9999-0000",
+      email: "express@farmaciaexpress.com",
+      horario: "Lun-Sáb: 8:00-22:00",
+      activa: true,
+      fechaRegistro: new Date(2024, 5, 8),
+    });
+    console.log(`  ✅ Farmacia Express: ${farm6Ref.id}`);
+
+    console.log("\n📋 Creando recetas...");
 
     // ========== RECETA 1: Sin cotizaciones ==========
     console.log("\n📄 Receta 1 (sin cotizaciones)...");
@@ -52,7 +123,7 @@ async function seedRecetas() {
     console.log(`✅ ${receta2Ref.id}`);
 
     await addDoc(collection(db, "recetas", receta2Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_1",
+      farmaciaId: farm1Ref.id,
       nombreComercial: "Farmacia del Sol",
       direccion: "Av. Siempre Viva 123",
       precio: 1550.00,
@@ -61,7 +132,7 @@ async function seedRecetas() {
     });
 
     await addDoc(collection(db, "recetas", receta2Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_2",
+      farmaciaId: farm2Ref.id,
       nombreComercial: "Farmacia Central",
       direccion: "Calle Falsa 456",
       estado: "sin_stock",
@@ -69,7 +140,7 @@ async function seedRecetas() {
     });
 
     await addDoc(collection(db, "recetas", receta2Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_3",
+      farmaciaId: farm3Ref.id,
       nombreComercial: "Farma Vida",
       direccion: "Bulevar de los Sueños 789",
       estado: "ilegible",
@@ -100,7 +171,7 @@ async function seedRecetas() {
     console.log(`✅ ${receta4Ref.id}`);
 
     await addDoc(collection(db, "recetas", receta4Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_1",
+      farmaciaId: farm1Ref.id,
       nombreComercial: "Farmacia del Sol",
       direccion: "Av. Siempre Viva 123",
       precio: 2200.00,
@@ -109,7 +180,7 @@ async function seedRecetas() {
     });
 
     await addDoc(collection(db, "recetas", receta4Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_4",
+      farmaciaId: farm4Ref.id,
       nombreComercial: "Farmacia La Salud",
       direccion: "Av. Libertador 1500",
       precio: 1875.00,
@@ -118,7 +189,7 @@ async function seedRecetas() {
     });
 
     await addDoc(collection(db, "recetas", receta4Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_5",
+      farmaciaId: farm5Ref.id,
       nombreComercial: "Farmacia Plus",
       direccion: "Calle Corrientes 890",
       estado: "esperando",
@@ -126,7 +197,7 @@ async function seedRecetas() {
     });
 
     await addDoc(collection(db, "recetas", receta4Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_2",
+      farmaciaId: farm2Ref.id,
       nombreComercial: "Farmacia Central",
       direccion: "Calle Falsa 456",
       precio: 2550.00,
@@ -135,7 +206,7 @@ async function seedRecetas() {
     });
 
     await addDoc(collection(db, "recetas", receta4Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_6",
+      farmaciaId: farm6Ref.id,
       nombreComercial: "Farmacia Express",
       direccion: "Av. Santa Fe 2200",
       estado: "sin_stock",
@@ -155,7 +226,7 @@ async function seedRecetas() {
     console.log(`✅ ${receta5Ref.id}`);
 
     const cot1 = await addDoc(collection(db, "recetas", receta5Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_1",
+      farmaciaId: farm1Ref.id,
       nombreComercial: "Farmacia del Sol",
       direccion: "Av. Siempre Viva 123",
       precio: 1800.00,
@@ -164,7 +235,7 @@ async function seedRecetas() {
     });
 
     await addDoc(collection(db, "recetas", receta5Ref.id, "cotizaciones"), {
-      farmaciaId: "farm_4",
+      farmaciaId: farm4Ref.id,
       nombreComercial: "Farmacia La Salud",
       direccion: "Av. Libertador 1500",
       precio: 1700.00,
@@ -179,7 +250,7 @@ async function seedRecetas() {
       userId: USER_ID,
       recetaId: receta5Ref.id,
       cotizacionId: cot1.id,
-      farmaciaId: "farm_1",
+      farmaciaId: farm1Ref.id,
       precio: 1800.00,
       estado: "pagado",
       fechaCreacion: new Date(2024, 10, 10, 10, 0),
@@ -189,6 +260,7 @@ async function seedRecetas() {
 
     console.log("\n✨ Seed completado!");
     console.log("\n📊 Resumen:");
+    console.log("   - 6 farmacias");
     console.log("   - 5 recetas");
     console.log("   - 10 cotizaciones");
     console.log("   - 1 pedido");

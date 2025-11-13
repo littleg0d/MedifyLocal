@@ -1,20 +1,21 @@
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import React, { useState } from "react";
-import { 
-  KeyboardAvoidingView, 
-  Platform, 
-  Pressable, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TextInput, 
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
   View,
-  Alert 
+  Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context"; 
-import { auth } from "../../src/lib/firebase";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { auth, db } from "../../src/lib/firebase";
 import { globalStyles, colors } from "../../assets/styles";
 
 export default function Login() {
@@ -33,7 +34,13 @@ export default function Login() {
       return;
     }
 
-    // Validar email con regex (igual que en register)
+    // Modo admin directo
+    if (email.trim().toLowerCase() === "admin" && password === "admin") {
+      router.replace("/admin");
+      return;
+    }
+
+    // Validar email con regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
       setError("Email inválido");
@@ -48,11 +55,47 @@ export default function Login() {
 
     try {
       setLoading(true);
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      // El redirect lo maneja automáticamente _layout.tsx
+      const userCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const uid = userCred.user.uid;
+
+      // 🔍 Verificar si está en farmacias
+      const farmaciaRef = doc(db, "farmacias", uid);
+      const farmaciaSnap = await getDoc(farmaciaRef);
+
+      if (farmaciaSnap.exists()) {
+        const data = farmaciaSnap.data();
+        if (data.role === "farmacia") {
+          router.replace("../farmacia");
+          return;
+        }
+      }
+      const adminRef = doc(db, "users", uid);
+      const adminSnap = await getDoc(adminRef);
+
+    if (adminSnap.exists()) {
+    const data = adminSnap.data();
+    if (data.role === "admin") {
+      router.replace("../admin");
+      return;
+     }
+    }
+      // 🔍 Si no está en farmacias, buscar en users
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        if (data.role === "patient") {
+          router.replace("/(tabs)");
+          return;
+        }
+      }
+
+      // 🔁 Si no tiene rol o no lo encontramos, ir al home de usuarios por defecto
+      router.replace("/(tabs)");
     } catch (e: any) {
       const code = String(e?.code || "");
-      
+
       const errorMessages: { [key: string]: string } = {
         "auth/invalid-credential": "Email o contraseña incorrectos",
         "auth/user-not-found": "Email o contraseña incorrectos",
@@ -70,10 +113,9 @@ export default function Login() {
           break;
         }
       }
-      
+
       setError(humanMessage);
-      
-      // Solo mostrar en desarrollo
+
       if (__DEV__) {
         console.error("Login error:", code, e.message);
       }
@@ -82,18 +124,20 @@ export default function Login() {
     }
   };
 
+  // ⚙️ Función para Google (placeholder)
   const handleGoogleSignIn = () => {
     Alert.alert("Próximamente", "El inicio de sesión con Google estará disponible pronto");
   };
 
+  // ---------- RENDER ----------
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
-        style={styles.keyboardView} 
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView 
-          contentContainerStyle={styles.container} 
+        <ScrollView
+          contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -145,12 +189,12 @@ export default function Login() {
               placeholderTextColor={colors.textTertiary}
             />
 
-            <Pressable 
+            <Pressable
               style={({ pressed }) => [
                 globalStyles.primaryButton,
                 pressed && globalStyles.buttonPressed,
-                loading && globalStyles.buttonDisabled
-              ]} 
+                loading && globalStyles.buttonDisabled,
+              ]}
               onPress={onSignIn}
               disabled={loading}
             >
@@ -159,14 +203,14 @@ export default function Login() {
               </Text>
             </Pressable>
 
-            {/* Forgot password -  */}
-            { <Link href="/auth/forgot" asChild disabled={loading}>
+            {/* Forgot password */}
+            <Link href="/auth/forgot" asChild disabled={loading}>
               <Pressable disabled={loading}>
                 <Text style={[styles.link, loading && styles.linkDisabled]}>
                   ¿Olvidaste tu contraseña?
                 </Text>
               </Pressable>
-            </Link> }
+            </Link>
           </View>
 
           {/* Divider */}
@@ -178,11 +222,11 @@ export default function Login() {
 
           {/* Social buttons */}
           <View style={styles.socialContainer}>
-            <Pressable 
+            <Pressable
               style={({ pressed }) => [
                 styles.socialBtn,
                 pressed && globalStyles.buttonPressed,
-                loading && globalStyles.buttonDisabled
+                loading && globalStyles.buttonDisabled,
               ]}
               disabled={loading}
               onPress={handleGoogleSignIn}
@@ -197,7 +241,13 @@ export default function Login() {
             <Text style={styles.registerText}>¿No tenés cuenta? </Text>
             <Link href="/auth/register" asChild disabled={loading}>
               <Pressable disabled={loading}>
-                <Text style={[styles.link, styles.linkInline, loading && styles.linkDisabled]}>
+                <Text
+                  style={[
+                    styles.link,
+                    styles.linkInline,
+                    loading && styles.linkDisabled,
+                  ]}
+                >
                   Crear una cuenta
                 </Text>
               </Pressable>

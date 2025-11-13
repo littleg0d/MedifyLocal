@@ -1,16 +1,14 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
-// Asegúrate de que esta ruta sea correcta para tu proyecto
 import { colors } from '../../assets/styles'; 
 
 export default function TabLayout() {
-
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary, // Usar tu color
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
           backgroundColor: 'white',
@@ -89,17 +87,6 @@ export default function TabLayout() {
           title: 'Solicitudes',
         }}
       />
-
-      {
-      */}
-      <Tabs.Screen
-        name="pagar"
-        options={{
-          href: null, // Oculto del tab bar
-          title: 'Pagar',
-        }}
-      />
-
     </Tabs>
   );
 }

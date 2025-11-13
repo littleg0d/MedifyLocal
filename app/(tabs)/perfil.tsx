@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert } from "react-native";
+import { Platform, View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../src/lib/firebase";
 import { signOut } from "firebase/auth";
@@ -25,7 +25,7 @@ export default function Perfil() {
 
   const [phone, setPhone] = useState("");
 
-  // Datos READ-ONLY (no editables)
+  // Datos READ-ONLY 
   const [readOnlyData, setReadOnlyData] = useState({
     firstName: "",
     lastName: "",
@@ -133,6 +133,44 @@ export default function Perfil() {
   };
 
   const handleLogout = async () => {
+        const performLogout = async () => {
+        try {
+        await signOut(auth);
+      } 
+      catch (error) {
+        console.error("Error al cerrar sesion: ", error);
+        Alert.alert("Error", "No pudimos cerrar sesión.");
+    }
+      };
+    
+    // Logica  para Web, Usar la confirmación  del navegador
+      if (Platform.OS === "web") {
+        const confirmed = window.confirm("¿Estás seguro que querés salir?");
+        if (confirmed) {
+          await performLogout();}
+    // Si no se confirma, la función termina aquí.
+        return;
+        }
+    
+    // Logica para celular: Usar Alert.alert de React Native
+        Alert.alert(
+        "Cerrar Sesión",
+        "¿Estás seguro que querés salir?",
+        [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Salir",
+          style: "destructive",
+          onPress: performLogout,
+          },
+    ]
+  );
+
+    };
+      
+
+ // Codigo anterior
+  /*const handleLogout = async () => {
     Alert.alert(
       "Cerrar Sesión",
       "¿Estás seguro que querés salir?",
@@ -153,7 +191,7 @@ export default function Perfil() {
       ]
     );
   };
-
+*/
   if (loading) {
     return (
       <SafeAreaView style={globalStyles.container}>
@@ -231,7 +269,7 @@ export default function Perfil() {
           />
         </View>
 
-        {/* Dirección (EDITABLE) */}
+        {/* Dirección  */}
         <Text style={styles.sectionTitle}>Dirección</Text>
 
         <View style={globalStyles.section}>
@@ -290,7 +328,7 @@ export default function Perfil() {
           </View>
         </View>
 
-        {/* Obra Social (EDITABLE) */}
+        {/* Obra Social*/}
         <Text style={styles.sectionTitle}>Obra Social</Text>
 
         <View style={globalStyles.section}>
