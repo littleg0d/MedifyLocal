@@ -1,4 +1,3 @@
-// app/farmacia/mis-cotizaciones.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -10,7 +9,7 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
-  Alert, // ✅ Importado
+  Alert, 
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../src/lib/firebase";
@@ -19,8 +18,8 @@ import {
   getDocs,
   doc,
   getDoc,
-  query, // ✅ Importado
-  where, // ✅ Importado
+  query,
+  where, 
 } from "firebase/firestore";
 import { globalStyles, colors } from "../../assets/styles";
 
@@ -31,6 +30,7 @@ interface Cotizacion {
   descripcion?: string;
   precio?: number;
   fechaRespuesta?: any;
+  
   // Datos de la receta
   direccion?: string;
   recetaDescripcion?: string;
@@ -98,8 +98,7 @@ export default function MisCotizaciones() {
 
       const recetasRef = collection(db, "recetas");
 
-      // ✅ CAMBIO: Query eficiente. Excluye recetas finalizadas.
-      // Esto PUEDE requerir un índice en Firestore (sobre el campo 'estado')
+
       const q = query(recetasRef, where("estado", "!=", "finalizada"));
 
       const recetasSnap = await getDocs(q);
@@ -109,7 +108,6 @@ export default function MisCotizaciones() {
       for (const recetaDoc of recetasSnap.docs) {
         const recetaData = recetaDoc.data();
 
-        // ❗ Ya no es necesario filtrar por 'finalizada' aquí
 
         // Buscar si respondimos en esta receta
         const farmaciaRespondioRef = doc(
@@ -131,6 +129,7 @@ export default function MisCotizaciones() {
             descripcion: farmaciaData.descripcion,
             precio: farmaciaData.precio,
             fechaRespuesta: farmaciaData.fechaRespuesta,
+            
             // Datos de la receta
             userObraSocial: recetaData.userObraSocial,
             userDNI: recetaData.userDNI,
@@ -160,7 +159,7 @@ export default function MisCotizaciones() {
         "No se pudieron cargar las cotizaciones. Es posible que falte un índice en Firestore (sobre el campo 'estado'). Revisa la consola."
       );
     } finally {
-      setLoading(false); // ✅ Desactiva el "cargando"
+      setLoading(false); 
       setRefreshing(false);
     }
   };
@@ -172,17 +171,7 @@ export default function MisCotizaciones() {
     }
   };
 
-  const formatPrice = (price?: number) => {
-    // ... (formatPrice logic)
-  };
-  const formatDate = (timestamp?: any) => {
-    // ... (formatDate logic)
-  };
-  const getEstadoBadge = (estado: string) => {
-    // ... (getEstadoBadge logic)
-  };
 
-  // ✅ VISTA DE CARGANDO
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={globalStyles.container}>
@@ -347,7 +336,6 @@ export default function MisCotizaciones() {
 }
 
 const styles = StyleSheet.create({
-  // ... (todos los estilos)
   header: {
     flexDirection: "row",
     alignItems: "center",
