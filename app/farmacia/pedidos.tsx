@@ -1,4 +1,3 @@
-// app/farmacia/pedidos.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -102,11 +101,10 @@ export default function FarmaciaPedidos() {
 
       const pedidosRef = collection(db, "pedidos");
 
-      // ✅ CAMBIO: Query para filtrar SOLO pagados o entregados
       const q = query(
         pedidosRef,
         where("farmaciaId", "==", fId),
-        where("estado", "in", ["pagado", "entregado"]) // <-- Lógica actualizada
+        where("estado", "in", ["pagado", "entregado"]) 
       );
 
       const snapshot = await getDocs(q);
@@ -115,12 +113,12 @@ export default function FarmaciaPedidos() {
         ...doc.data(),
       })) as Pedido[];
 
-      // Ordenar manualmente por fecha (más confiable)
+      // Ordenar manualmente por fecha 
       pedidosData.sort((a, b) => {
         if (!a.fechaCreacion || !b.fechaCreacion) return 0;
         const aTime = a.fechaCreacion.seconds || 0;
         const bTime = b.fechaCreacion.seconds || 0;
-        return bTime - aTime; // Más reciente primero
+        return bTime - aTime; 
       });
 
       setPedidos(pedidosData);
@@ -161,7 +159,7 @@ export default function FarmaciaPedidos() {
               await updateDoc(pedidoRef, {
                 estado: "entregado",
               });
-              await onRefresh(); // Recargar la lista
+              await onRefresh(); 
             } catch (error) {
               console.error("Error al actualizar el pedido:", error);
               Alert.alert(
