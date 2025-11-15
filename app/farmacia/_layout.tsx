@@ -1,4 +1,3 @@
-// app/farmacia/_layout.tsx
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
