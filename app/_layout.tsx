@@ -92,7 +92,7 @@ function RootLayoutNav() {
     }
   }, [user, role, segments, isLoading]);
 
-  // 🔥 CLAVE: No renderizar Slot si necesita redireccionar
+
   const shouldRender = () => {
     if (isLoading) return false;
 
