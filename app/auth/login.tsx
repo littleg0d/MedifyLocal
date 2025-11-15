@@ -48,9 +48,7 @@ export default function Login() {
 
     try {
       setLoading(true);
-      // Solo hacer login, el _layout.tsx se encarga de redirigir según el rol
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      // No hacer router.replace aquí, dejar que _layout.tsx maneje la redirección
     } catch (e: any) {
       const code = String(e?.code || "");
 
@@ -82,7 +80,7 @@ export default function Login() {
     }
   };
 
-  // ⚙️ Función para Google (placeholder)
+
   const handleGoogleSignIn = () => {
     Alert.alert("Próximamente", "El inicio de sesión con Google estará disponible pronto");
   };
