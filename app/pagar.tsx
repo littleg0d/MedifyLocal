@@ -12,7 +12,7 @@ export default function PagarScreen() {
   // logica viene del hook
   const paymentLogic = usePaymentLogic(recetaId, cotizacionId, router);
 
-  // uiviene del componente
+  // ui viene del componente
   return (
     <PaymentView
       {...paymentLogic}
