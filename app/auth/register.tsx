@@ -42,7 +42,7 @@ export default function Register() {
   const [obraSocial, setObraSocial] = useState("Seleccioná tu obra social");
   const [numeroObraSocial, setNumeroObraSocial] = useState("");
 
-  // ✅ Verificar si debe habilitar el campo de número
+  // Verificar si debe habilitar el campo de número
   const debeIngresarNumero = obraSocial !== "Seleccioná tu obra social" && obraSocial !== "Sin obra social";
 
   // Función para formatear fecha automáticamente
@@ -95,7 +95,7 @@ export default function Register() {
     return age;
   };
 
-  // ✅ Handler para cambiar obra social
+  //  Handler para cambiar obra social
   const handleObraSocialChange = (value: string) => {
     setObraSocial(value);
     // Si selecciona "Sin obra social", limpiar el número
@@ -177,7 +177,7 @@ export default function Register() {
       return;
     }
 
-    // ✅ Validación de número SOLO si seleccionó una obra social (no "Sin obra social")
+    //  Validación de número SOLO si seleccionó una obra social (no "Sin obra social")
     if (debeIngresarNumero && !numeroObraSocial.trim()) {
       Alert.alert("Error", "Ingresá tu número de afiliado");
       return;
@@ -196,7 +196,7 @@ export default function Register() {
         displayName: `${firstName.trim()} ${lastName.trim()}`,
       });
 
-      // ✅ Guardar obra social solo si seleccionó una
+      //  Guardar obra social solo si seleccionó una
       const userData: any = {
         email: email.trim(),
         displayName: `${firstName.trim()} ${lastName.trim()}`,
@@ -214,7 +214,7 @@ export default function Register() {
         createdAt: serverTimestamp(),
       };
 
-      // ✅ Solo agregar obra social si NO seleccionó "Sin obra social"
+      //  Solo agregar obra social si NO seleccionó "Sin obra social"
       if (obraSocial !== "Sin obra social") {
         userData.obraSocial = {
           name: obraSocial,
@@ -387,7 +387,7 @@ export default function Register() {
               </Picker>
             </View>
 
-            {/* ✅ Campo de número - DESHABILITADO si no tiene obra social o si eligió "Sin obra social" */}
+            {/* Campo de número - DESHABILITADO si no tiene obra social o si eligió "Sin obra social" */}
             <TextInput
               placeholder={debeIngresarNumero ? "Número de afiliado *" : "No requerido"}
               value={numeroObraSocial}
