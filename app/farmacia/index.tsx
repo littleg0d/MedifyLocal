@@ -1,4 +1,3 @@
-// app/farmacia/index.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -107,7 +106,6 @@ export default function FarmaciaHome() {
     const confirmLogout = async () => {
       try {
         await signOut(auth);
-        // El _layout.tsx detectará el cambio y redirigirá automáticamente
       } catch (error) {
         console.error("Error al cerrar sesión:", error);
         if (Platform.OS === 'web') {
