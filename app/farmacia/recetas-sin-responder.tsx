@@ -1,4 +1,3 @@
-// app/farmacia/recetas-sin-responder.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -40,7 +39,7 @@ interface Receta {
   imagenUrl?: string;
   fechaCreacion?: any;
   userName?: string;
-  userEmail?: string; // Agregado
+  userEmail?: string; 
   userObraSocial?: {
     name: string;
     number?: string;
@@ -127,7 +126,6 @@ export default function RecetasSinResponder() {
     }
   };
 
-  // Función de carga eficiente (Promise.all)
   const loadRecetas = async (fId: string) => {
     try {
       if (!refreshing) {
@@ -136,14 +134,14 @@ export default function RecetasSinResponder() {
 
       const recetasRef = collection(db, "recetas");
 
-      // Paso 1: Traer solo recetas activas
+      //  Traer solo recetas activas
       const q = query(
         recetasRef,
         where("estado", "in", ["esperando_respuestas", "farmacias_respondiendo"])
       );
       const snapshot = await getDocs(q);
 
-      // Paso 2: Crear promesas para verificar respuestas en paralelo
+      //  Crear promesas para verificar respuestas en paralelo
       const promises = snapshot.docs.map(recetaDoc => {
         const farmaciaRespondioRef = doc(
           db,
@@ -155,10 +153,10 @@ export default function RecetasSinResponder() {
         return getDoc(farmaciaRespondioRef);
       });
 
-      // Paso 3: Ejecutar todas las verificaciones juntas
+      //  Ejecutar todas las verificaciones juntas
       const farmaciaRespondioSnaps = await Promise.all(promises);
 
-      // Paso 4: Procesar resultados
+      //  Procesar resultados
       const recetasSinResponder: Receta[] = [];
       farmaciaRespondioSnaps.forEach((farmaciaRespondioSnap, index) => {
         // Si el documento NO existe, significa que no hemos respondido
@@ -206,7 +204,7 @@ export default function RecetasSinResponder() {
     setRespuestaEstado("cotizado");
     setRespuestaDescripcion("");
     setRespuestaPrecio("");
-    setIsOpeningModal(true); // <-- Activa el trigger
+    setIsOpeningModal(true); 
   };
 
   const handleImageZoom = (imageUrl: string) => {
@@ -235,7 +233,6 @@ export default function RecetasSinResponder() {
   const getRecetaTitle = (receta: Receta) => {
     const userName = (receta.userName || "Usuario").toLowerCase();
     const recetaId = receta.id.slice(0, 8);
-    // Se quita la fecha del título, irá al modal
     return `${userName} - ${recetaId}`;
   };
 
@@ -385,7 +382,7 @@ export default function RecetasSinResponder() {
 
                 <Text style={styles.recetaId}>{getRecetaTitle(receta)}</Text>
 
-                {/* (Se quitaron DNI, OS y Teléfono de aquí) */}
+                {/*  */}
 
                 {receta.descripcion && (
                   <View style={styles.infoRow}>
@@ -465,7 +462,7 @@ export default function RecetasSinResponder() {
                 </Pressable>
               )}
 
-              {/* ✅ DATOS DEL PACIENTE MOVIDOS AL MODAL */}
+              {}
               <View style={styles.infoCardModal}>
                 <Text style={styles.infoCardTitle}>Datos del Paciente</Text>
 
