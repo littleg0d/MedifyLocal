@@ -4,11 +4,12 @@ import { Platform } from 'react-native';
 import { colors } from '../../assets/styles'; 
 
 export default function TabLayout() {
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.primary, // Usar tu color
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
           backgroundColor: 'white',
@@ -87,6 +88,9 @@ export default function TabLayout() {
           title: 'Solicitudes',
         }}
       />
+
+    
+
     </Tabs>
   );
 }

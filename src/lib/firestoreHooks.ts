@@ -19,12 +19,17 @@ import {
   Cotizacion,
   PAYMENT_CONFIG,
 } from "../../assets/types";
-
-
-// HOOK GENERICO BASE
+import { 
+  mapPedidoFromFirestore, 
+  mapCotizacionFromFirestore, 
+  mapRecetaFromFirestore 
+} from "./firestoreMappers";
+// ============================================================================
+// HOOK GENÉRICO BASE
+// ============================================================================
 
 /**
- * Hook generico para suscripciones en tiempo real a Firestore
+ * Hook genérico para suscripciones en tiempo real a Firestore
  */
 function useFirestoreSubscription<T>(
   queryBuilder: () => Query<DocumentData> | null,
@@ -70,8 +75,9 @@ function useFirestoreSubscription<T>(
   return { data, loading, error };
 }
 
-
+// ============================================================================
 // HOOKS DE PEDIDOS
+// ============================================================================
 
 /**
  * Hook que obtiene todos los pedidos del usuario actual en tiempo real
@@ -125,7 +131,7 @@ export function usePedidosDelUsuario() {
 }
 
 /**
- * Hook que obtiene el ultimo pedido bloqueante de una receta específica en tiempo real
+ * Hook que obtiene el último pedido bloqueante de una receta específica en tiempo real
  */
 export function useUltimoPedidoPorReceta(recetaId: string | null) {
   const [pedido, setPedido] = useState<PedidoActivoReceta | null>(null);
@@ -192,8 +198,9 @@ export function useUltimoPedidoPorReceta(recetaId: string | null) {
   return { pedido, loading, error };
 }
 
-
+// ============================================================================
 // HOOKS DE COTIZACIONES
+// ============================================================================
 
 /**
  * Hook que obtiene las cotizaciones de una receta en tiempo real
@@ -216,7 +223,7 @@ export function useCotizaciones(recetaId: string | null) {
     const cotizacionesRef = collection(db, "recetas", recetaId, "cotizaciones");
     const q = query(
       cotizacionesRef,
-      orderBy("estado", "asc") // Muestra cotizados primero
+      orderBy("estado", "asc") // Muestra "cotizado" primero
     );
 
     const unsubscribe = onSnapshot(
@@ -243,47 +250,57 @@ export function useCotizaciones(recetaId: string | null) {
   return { cotizaciones, loading, error };
 }
 
-
-// FUNCIONES DE MAPEO
-
-
-/**
- * Mapea los datos de Firestore al tipo Pedido
- */
-function mapPedidoFromFirestore(id: string, data: any): Pedido {
-  return {
-    id,
-    userId: data.userId,
-    recetaId: data.recetaId,
-    cotizacionId: data.cotizacionId,
-    farmaciaId: data.farmaciaId,
-    precio: data.precio,
-    estado: data.estado as EstadoPedido,
-    fechaCreacion: (data.fechaCreacion as Timestamp).toDate(),
-    fechaPago: data.fechaPago ? (data.fechaPago as Timestamp).toDate() : null,
-    fechaCierre: data.fechaCierre
-      ? (data.fechaCierre as Timestamp).toDate()
-      : undefined,
-    paymentId: data.paymentId,
-    paymentStatus: data.paymentStatus,
-    nombreComercial: data.nombreComercial,
-    addressUser: data.addressUser,
-    imagenUrl: data.imagenUrl,
-  };
-}
+// ============================================================================
+// HOOKS DE RECETAS
+// ============================================================================
 
 /**
- * Mapea los datos de Firestore al tipo Cotizacion
+ * Hook que obtiene todas las recetas del usuario actual en tiempo real
  */
-function mapCotizacionFromFirestore(id: string, data: any): Cotizacion {
-  return {
-    id,
-    farmaciaId: data.farmaciaId,
-    nombreComercial: data.nombreComercial,
-    direccion: data.direccion,
-    precio: data.precio,
-    estado: data.estado,
-    fechaCreacion: (data.fechaCreacion as Timestamp).toDate(),
-    imagenUrl: data.imagenUrl,
-  };
+export function useRecetasDelUsuario() {
+  const [recetas, setRecetas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const userId = auth.currentUser?.uid;
+
+    if (!userId) {
+      setLoading(false);
+      setRecetas([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const recetasRef = collection(db, "recetas");
+    const q = query(
+      recetasRef,
+      where("userId", "==", userId),
+      orderBy("fechaCreacion", "desc")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+          const recetasData = querySnapshot.docs.map((doc) =>
+          mapRecetaFromFirestore(doc.id, doc.data())
+        );
+        setRecetas(recetasData);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Error en useRecetasDelUsuario:", err);
+        setError(err);
+        setRecetas([]);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  return { recetas, loading, error };
 }
+

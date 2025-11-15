@@ -1,11 +1,21 @@
-// app/admin/index.tsx
 import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { colors } from "../../assets/styles";
+import { signOut } from "firebase/auth"; 
+import { auth } from "../../src/lib/firebase"; 
 
 export default function AdminDashboard() {
   const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.replace("/auth/login");
+    } catch (error) {
+      console.error("Error al cerrar sesión:", error);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -29,7 +39,7 @@ export default function AdminDashboard() {
 
         <Pressable
           style={[styles.button, styles.logout]}
-          onPress={() => router.replace("../auth/login")}
+          onPress={handleLogout} 
         >
           <Text style={styles.buttonText}>🚪 Cerrar Sesión</Text>
         </Pressable>

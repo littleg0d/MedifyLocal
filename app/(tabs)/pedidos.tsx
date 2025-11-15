@@ -1,41 +1,50 @@
 import { useState } from "react";
-import { View, Text, ScrollView, ActivityIndicator, Alert, StyleSheet } from "react-native";
+import { Alert , Platform} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { globalStyles, colors } from "../../assets/styles";
-import { DetallePedido } from "../../assets/types";
 
-import { usePedidosDelUsuario } from "../../src/pedidos/hooks";
+
+import { globalStyles } from "../../assets/styles";
+import { DetallePedido } from "../../assets/types";
+import { usePedidosDelUsuario } from "../../src/lib/firestoreHooks";
 import { loadDetallePedido } from "../../src/pedidos/helpers";
 import { EmptyState, PedidoCard, DetalleModal } from "../../src/pedidos/components";
+import { LoadingScreen, ErrorScreen, SimpleHeader, ContentScrollView, ListContainer} from "../../src/components/common";
+import { navigateToPagar } from "../../src/lib/navigationHelpers";
 
 export default function Pedidos() {
   const router = useRouter();
   
-  const { pedidos, loading , error: errorPedidos} = usePedidosDelUsuario();
+  const { pedidos, loading, error: errorPedidos } = usePedidosDelUsuario();
   
   const [modalVisible, setModalVisible] = useState(false);
   const [detalleSeleccionado, setDetalleSeleccionado] = useState<DetallePedido | null>(null);
 
   const handleReintentarPago = (recetaId: string, cotizacionId: string) => {
-    Alert.alert(
-      "Reintentar Pago",
-      "¿Deseas volver a intentar el pago para este pedido?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Sí, reintentar",
-          onPress: () => {
-            setModalVisible(false);
-            router.push({
-              pathname: "/pagar",
-              params: { recetaId, cotizacionId },
-            });
+    if (Platform.OS === 'web') {
+      // En web usar confirm nativo
+      const confirmar = window.confirm("¿Deseas volver a intentar el pago para este pedido?");
+      if (confirmar) {
+        setModalVisible(false);
+        navigateToPagar(router, recetaId, cotizacionId);
+      }
+    } else {
+      // En móvil usar Alert de React Native
+      Alert.alert(
+        "Reintentar Pago",
+        "¿Deseas volver a intentar el pago para este pedido?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Sí, reintentar",
+            onPress: () => {
+              setModalVisible(false);
+              navigateToPagar(router, recetaId, cotizacionId);
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleVerDetalle = async (pedidoId: string, index: number) => {
@@ -45,57 +54,37 @@ export default function Pedidos() {
       setModalVisible(true);
     } catch (error) {
       console.error("Error al cargar detalle:", error);
-      Alert.alert("Error", "No pudimos cargar los detalles del pedido.");
+      const mensaje = "No pudimos cargar los detalles del pedido.";
+      Platform.OS === 'web' ? window.alert(`Error: ${mensaje}`) : Alert.alert("Error", mensaje);
     }
   };
 
+  // Loading state
   if (loading) {
+    return <LoadingScreen message="Cargando pedidos..." />;
+  }
+
+  // Error state
+  if (errorPedidos) {
     return (
-      <SafeAreaView style={globalStyles.container}>
-        <View style={globalStyles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={globalStyles.loadingText}>Cargando pedidos...</Text>
-        </View>
-      </SafeAreaView>
+      <ErrorScreen
+        title="Error de Conexión"
+        message="No pudimos cargar tus pedidos. Por favor, revisa tu conexión."
+        header={<SimpleHeader title="Mis Pedidos" />}
+      />
     );
   }
-//  MANEJO DE ERROR
-if (errorPedidos) {
+
+  // Main content
   return (
     <SafeAreaView style={globalStyles.container} edges={["top"]}>
-      <View style={globalStyles.header}>
-        <View style={styles.placeholder} />
-        <Text style={globalStyles.titleMedium}>Mis Pedidos</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <SimpleHeader title="Mis Pedidos" />
 
-      <View style={globalStyles.emptyContainer}>
-        <Ionicons
-          name="cloud-offline-outline"
-          size={64}
-          color={colors.errorDark}
-        />
-        <Text style={globalStyles.emptyTitle}>Error de Conexión</Text>
-        <Text style={globalStyles.emptyText}>
-          No pudimos cargar tus pedidos. Por favor, revisa tu conexión.
-        </Text>
-      </View>
-    </SafeAreaView>
-  );
-}
-  return (
-    <SafeAreaView style={globalStyles.container} edges={["top"]}>
-      <View style={globalStyles.header}>
-        <View style={styles.placeholder} />
-        <Text style={globalStyles.titleMedium}>Mis Pedidos</Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      <ScrollView style={styles.scrollView}>
+      <ContentScrollView>
         {pedidos.length === 0 ? (
           <EmptyState />
         ) : (
-          <View style={styles.listContainer}>
+          <ListContainer>
             {pedidos.map((pedido, index) => (
               <PedidoCard
                 key={pedido.id}
@@ -105,10 +94,9 @@ if (errorPedidos) {
                 onReintentarPago={handleReintentarPago}
               />
             ))}
-          </View>
+          </ListContainer>
         )}
-        <View style={globalStyles.spacer} />
-      </ScrollView>
+      </ContentScrollView>  
 
       <DetalleModal
         visible={modalVisible}
@@ -120,15 +108,3 @@ if (errorPedidos) {
   );
 }
 
-const styles = StyleSheet.create({
-  placeholder: {
-    width: 48,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  listContainer: {
-    padding: 16,
-    gap: 16,
-  },
-});

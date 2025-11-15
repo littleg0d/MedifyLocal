@@ -10,7 +10,6 @@ import { PaymentMedicamentoCard } from "./PaymentMedicamentoCard";
 import { PaymentDireccionCard } from "./PaymentDireccionCard";
 import { PaymentSeguridadCard } from "./PaymentSeguridadCard";
 import { PaymentActionButton } from "./PaymentActionButton";
-
 export function PaymentView(props: PaymentViewProps) {
   const {
     isLoading,

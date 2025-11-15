@@ -1,6 +1,7 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { usePaymentLogic } from "../src/payment/hooks/usePaymentLogic";
 import { PaymentView } from "../src/payment/components/PaymentView";
+import { navigateToSolicitudes, navigateToPedidos, navigateToPerfil } from "../src/lib/navigationHelpers";
 
 export default function PagarScreen() {
   const router = useRouter();
@@ -17,14 +18,10 @@ export default function PagarScreen() {
       {...paymentLogic}
       recetaId={recetaId}
       cotizacionId={cotizacionId}
-      onGoBack={() =>
-        router.push({
-          pathname: "/(tabs)/solicitudes",
-          params: { recetaId },
-        })
-      }
-      onGoToProfile={() => router.push("/(tabs)/perfil")}
-      onGoToPedidos={() => router.push("/(tabs)/pedidos")}
+      onGoBack={() => navigateToSolicitudes(router, recetaId)}
+      
+      onGoToProfile={() => navigateToPerfil(router)}
+      onGoToPedidos={() => navigateToPedidos(router)}
     />
   );
 }

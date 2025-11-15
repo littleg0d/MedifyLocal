@@ -1,161 +1,51 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
-  ActivityIndicator,
   Image,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth, db } from "../../src/lib/firebase";
-import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
-import { globalStyles, colors } from "../../assets/styles";
 
-interface Receta {
-  id: string;
-  userId: string;
-  imagenUrl: string;
-  fechaCreacion: Date;
-  estado: "esperando_respuestas" | "farmacias_respondiendo" | "finalizada";
-  cotizacionesCount: number;
-}
+import { globalStyles, colors } from "../../assets/styles";
+import { LoadingScreen, SimpleHeader, EmptyState, ContentScrollView, ListContainer } from "../../src/components/common";
+import { formatDate } from "../../src/lib/formatHelpers";
+import { useRecetasDelUsuario } from "../../src/lib/firestoreHooks";
+import { getEstadoRecetaConfig } from "../../src/lib/estadosHelpers";
+import { navigateToSolicitudes } from "../../src/lib/navigationHelpers";
 
 export default function Recetas() {
   const router = useRouter();
-  const [recetas, setRecetas] = useState<Receta[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // ✅ Hook que maneja toda la lógica de Firebase
+  const { recetas, loading, error } = useRecetasDelUsuario();
 
-  useEffect(() => {
-    const user = auth.currentUser;
-    
-    if (!user) {
-      Alert.alert("Error", "Debes iniciar sesión para ver tus recetas.");
-      setLoading(false);
-      return;
-    }
-
-    // Consulta a Firebase con onSnapshot para escuchar cambios en tiempo real
-    const recetasRef = collection(db, "recetas");
-    const q = query(
-      recetasRef,
-      where("userId", "==", user.uid),
-      orderBy("fechaCreacion", "desc")
-    );
-    
-    // Suscripción en tiempo real
-    const unsubscribe = onSnapshot(
-      q,
-      (querySnapshot) => {
-        const recetasData: Receta[] = [];
-        
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          recetasData.push({
-            id: doc.id,
-            userId: data.userId,
-            imagenUrl: data.imagenUrl,
-            fechaCreacion: data.fechaCreacion.toDate(),
-            estado: data.estado,
-            cotizacionesCount: data.cotizacionesCount || 0,
-          });
-        });
-
-        setRecetas(recetasData);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error al escuchar recetas:", error);
-        Alert.alert("Error", "No pudimos cargar las recetas.");
-        setLoading(false);
-      }
-    );
-
-    // Cleanup: desuscribirse cuando el componente se desmonte
-    return () => unsubscribe();
-  }, []);
-
-  const getEstadoBadge = (estado: string) => {
-    switch (estado) {
-      case "esperando_respuestas":
-        return {
-          bg: colors.warning,
-          text: colors.warningDark,
-          label: "Esperando respuestas",
-        };
-      case "farmacias_respondiendo":
-        return {
-          bg: colors.successLight,
-          text: colors.successDark,
-          label: "Farmacias respondiendo",
-        };
-      case "finalizada":
-        return {
-          bg: colors.gray200,
-          text: colors.gray700,
-          label: "Finalizada",
-        };
-      default:
-        return {
-          bg: colors.gray100,
-          text: colors.textSecondary,
-          label: "Desconocido",
-        };
-    }
-  };
-
-  const formatDate = (date: Date) => {
-    return `Enviada el ${date.getDate()} de ${
-      [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-      ][date.getMonth()]
-    }, ${date.getFullYear()}`;
-  };
-
+  // ✅ Handler para navegar a solicitudes
   const handleVerSolicitudes = (recetaId: string) => {
-    router.push({
-      pathname: "/solicitudes",
-      params: { recetaId },
-    });
+    navigateToSolicitudes(router, recetaId);
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={globalStyles.container}>
-        <View style={globalStyles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primaryLight} />
-          <Text style={globalStyles.loadingText}>Cargando recetas...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // ✅ Pantalla de carga
+  if (loading) return <LoadingScreen message="Cargando recetas..." />;
 
   return (
     <SafeAreaView style={globalStyles.container} edges={["top"]}>
-      <View style={globalStyles.header}>
-        <View style={{ width: 48 }} />
-        <Text style={globalStyles.titleMedium}>Mis Recetas</Text>
-        <View style={{ width: 48 }} />
-      </View>
+      <SimpleHeader title="Mis Recetas" />
 
-      <ScrollView style={styles.scrollView}>
+      <ContentScrollView>
         {recetas.length === 0 ? (
-          <View style={globalStyles.emptyContainer}>
-            <Ionicons name="receipt-outline" size={64} color={colors.textMutedDark} />
-            <Text style={globalStyles.emptyTitle}>Sin recetas aún</Text>
-            <Text style={globalStyles.emptyText}>
-              Subí tu primera receta para que las farmacias te coticen
-            </Text>
-          </View>
+          <EmptyState
+            icon="receipt-outline"
+            title="Sin recetas aún"
+            message="Subí tu primera receta para que las farmacias te coticen"
+          />
         ) : (
-          <View style={styles.listContainer}>
+          <ListContainer>
             {recetas.map((receta) => {
-              const badge = getEstadoBadge(receta.estado);
+              // ✅ Obtener configuración del badge según el estado
+              const badge = getEstadoRecetaConfig(receta.estado);
               const puedeVerRespuestas = receta.estado === "farmacias_respondiendo";
 
               return (
@@ -185,7 +75,7 @@ export default function Recetas() {
 
                     <View style={styles.cardInfo}>
                       <Text style={styles.dateText}>
-                        {formatDate(receta.fechaCreacion)}
+                        Enviada el {formatDate(receta.fechaCreacion)}
                       </Text>
                       <View
                         style={[
@@ -210,23 +100,16 @@ export default function Recetas() {
                 </Pressable>
               );
             })}
-          </View>
+          </ListContainer>
         )}
 
         <View style={globalStyles.spacer} />
-      </ScrollView>
+      </ContentScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  listContainer: {
-    padding: 16,
-    gap: 16,
-  },
   cardContent: {
     flexDirection: "row",
     padding: 16,

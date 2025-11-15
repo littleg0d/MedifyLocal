@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Alert, Linking } from "react-native";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { Platform, Linking, Alert } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { db, auth } from "../../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -9,17 +9,22 @@ import {
   Address,
   Cotizacion,
   Receta,
-  PreferenciaRequest,
   PreferenciaResponse,
 } from "../../../assets/types";
 
-// Hooks y helpers centralizados
+import { navigateToPedidos, navigateToPerfil } from "../../lib/navigationHelpers";
 import { useUltimoPedidoPorReceta } from "../../lib/firestoreHooks";
 import { getEstadoPedidoConfig } from "../../lib/estadosHelpers";
-import { isAddressValid } from "../../lib/formatHelpers";
-import { esPedidoDuplicado } from "../utils/paymentUtil";
-import { ALERT_DELAY_MS } from "../utils/paymentUtil";
+import { isAddressValid, esPedidoDuplicado, ALERT_DELAY_MS } from "../../lib/formatHelpers";
 import { UsePaymentLogicReturn, TipoBoton } from "../types";
+
+// ✅ Nuevo tipo simplificado para el request
+interface PreferenciaRequestSimple {
+  userId: string;
+  farmaciaId: string;
+  recetaId: string;
+  cotizacionId: string;
+}
 
 export function usePaymentLogic(
   recetaId: string,
@@ -36,6 +41,32 @@ export function usePaymentLogic(
   // Hook de pedido en tiempo real
   const { pedido: pedidoExistente, loading: loadingPedido, error: errorPedido } =
     useUltimoPedidoPorReceta(recetaId);
+
+  // ⭐ REF para controlar el timeout y evitar race conditions
+  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ⭐ Limpiar timeout cuando el componente se desmonte
+  useEffect(() => {
+    return () => {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // ==================== AUTH GUARD ====================
+  useEffect(() => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      if (Platform.OS === 'web') {
+        window.alert("Sesión expirada. Por favor inicia sesión nuevamente");
+      } else {
+        Alert.alert("Sesión expirada", "Por favor inicia sesión nuevamente");
+      }
+      router.replace("/login");
+      return;
+    }
+  }, [router]);
 
   // ==================== CARGA DE DIRECCIÓN ====================
   useFocusEffect(
@@ -58,13 +89,18 @@ export function usePaymentLogic(
       };
 
       loadDireccion();
-    }, [])
+    }, [router])
   );
 
   // ==================== CARGA DE DATOS ESTÁTICOS ====================
   useEffect(() => {
     if (!recetaId || !cotizacionId) {
-      Alert.alert("Error", "Faltan parámetros necesarios");
+      const mensaje = "Faltan parámetros necesarios";
+      if (Platform.OS === 'web') {
+        window.alert(mensaje);
+      } else {
+        Alert.alert("Error", mensaje);
+      }
       router.back();
       return;
     }
@@ -74,7 +110,12 @@ export function usePaymentLogic(
       try {
         const userId = auth.currentUser?.uid;
         if (!userId) {
-          Alert.alert("Error", "Usuario no autenticado");
+          const mensaje = "Usuario no autenticado";
+          if (Platform.OS === 'web') {
+            window.alert(mensaje);
+          } else {
+            Alert.alert("Error", mensaje);
+          }
           router.back();
           return;
         }
@@ -86,7 +127,12 @@ export function usePaymentLogic(
         ]);
 
         if (!cotizacionSnap.exists()) {
-          Alert.alert("Error", "No se encontró la cotización");
+          const mensaje = "No se encontró la cotización";
+          if (Platform.OS === 'web') {
+            window.alert(mensaje);
+          } else {
+            Alert.alert("Error", mensaje);
+          }
           router.back();
           return;
         }
@@ -115,7 +161,12 @@ export function usePaymentLogic(
         }
       } catch (error) {
         console.error("Error al cargar datos estáticos:", error);
-        Alert.alert("Error", "No pudimos cargar los datos del pago");
+        const mensaje = "No pudimos cargar los datos del pago";
+        if (Platform.OS === 'web') {
+          window.alert(mensaje);
+        } else {
+          Alert.alert("Error", mensaje);
+        }
         router.back();
       } finally {
         setLoadingStatic(false);
@@ -125,38 +176,10 @@ export function usePaymentLogic(
     loadStaticData();
   }, [recetaId, cotizacionId, router]);
 
-  // ==================== VALIDACIÓN DE COTIZACIÓN ====================
-  const validarCotizacionDisponible = useCallback(async (): Promise<boolean> => {
-    try {
-      const cotizacionRef = doc(db, "recetas", recetaId, "cotizaciones", cotizacionId);
-      const cotizacionSnap = await getDoc(cotizacionRef);
-
-      if (!cotizacionSnap.exists()) {
-        Alert.alert("Error", "Esta cotización ya no existe");
-        return false;
-      }
-
-      const cotizacionData = cotizacionSnap.data();
-      if (cotizacionData.estado !== "cotizado") {
-        Alert.alert(
-          "No disponible",
-          "Esta cotización ya no está disponible.",
-          [{ text: "Entendido", onPress: () => router.back() }]
-        );
-        return false;
-      }
-      return true;
-    } catch (error) {
-      console.error("Error validando cotización:", error);
-      Alert.alert("Error", "No pudimos verificar la disponibilidad");
-      return false;
-    }
-  }, [recetaId, cotizacionId, router]);
-
-  // ==================== CREAR PREFERENCIA ====================
+  // ==================== CREAR PREFERENCIA (SIMPLIFICADO) ====================
   const crearPreferencia = useCallback(async (): Promise<PreferenciaResponse> => {
-    if (!cotizacion || !receta || !direccionUsuario) {
-      throw new Error("Faltan datos necesarios");
+    if (!cotizacion) {
+      throw new Error("Faltan datos de cotización");
     }
 
     const userId = auth.currentUser?.uid;
@@ -164,16 +187,15 @@ export function usePaymentLogic(
       throw new Error("Usuario no autenticado");
     }
 
-    const request: PreferenciaRequest = {
-      nombreComercial: cotizacion.nombreComercial,
-      recetaId: recetaId,
+    // ✅ Solo enviar IDs - El backend obtiene todo lo demás desde Firebase
+    const request: PreferenciaRequestSimple = {
       userId: userId,
       farmaciaId: cotizacion.farmaciaId,
-      direccion: direccionUsuario,
+      recetaId: recetaId,
       cotizacionId: cotizacionId,
-      imagenUrl: receta.imagenUrl,
-      descripcion: `Pedido de medicamento`,
     };
+
+    console.log("📤 Enviando request simplificado:", request);
 
     const response = await fetch(`${API_URL}/api/pagos/crear-preferencia`, {
       method: "POST",
@@ -189,66 +211,133 @@ export function usePaymentLogic(
     }
 
     return response.json();
-  }, [cotizacion, receta, direccionUsuario, recetaId, cotizacionId]);
+  }, [cotizacion, recetaId, cotizacionId]);
 
   // ==================== MANEJADOR DE PAGO ====================
   const handlePagar = useCallback(async () => {
     if (procesandoPago) return;
 
-    // Validar dirección usando helper centralizado
+    // Validar dirección
     if (!isAddressValid(direccionUsuario)) {
-      Alert.alert(
-        "Dirección incompleta",
-        "Por favor completa tu dirección en el perfil antes de realizar el pago",
-        [
-          { text: "Cancelar", style: "cancel" },
-          { text: "Ir al perfil", onPress: () => router.push("/(tabs)/perfil") },
-        ]
-      );
+      if (Platform.OS === 'web') {
+        const confirmar = window.confirm(
+          "Dirección incompleta\n\nPor favor completa tu dirección en el perfil antes de realizar el pago"
+        );
+        if (confirmar) {
+          navigateToPerfil(router);
+        }
+      } else {
+        Alert.alert(
+          "Dirección incompleta",
+          "Por favor completa tu dirección en el perfil antes de realizar el pago",
+          [
+            { text: "Cancelar", style: "cancel" },
+            { text: "Ir al perfil", onPress: () => navigateToPerfil(router) },
+          ]
+        );
+      }
       return;
     }
 
-    // Validar disponibilidad
-    const disponible = await validarCotizacionDisponible();
-    if (!disponible) return;
+    // Validar disponibilidad usando estado actual
+    if (cotizacion?.estado !== "cotizado") {
+      if (Platform.OS === 'web') {
+        window.alert("Esta cotización ya no está disponible.");
+        router.back();
+      } else {
+        Alert.alert(
+          "No disponible",
+          "Esta cotización ya no está disponible.",
+          [{ text: "Entendido", onPress: () => router.back() }]
+        );
+      }
+      return;
+    }
 
     setProcesandoPago(true);
 
     try {
       const response = await crearPreferencia();
-      const supported = await Linking.canOpenURL(response.paymentUrl);
-
-      if (!supported) {
-        throw new Error("No se puede abrir el enlace de pago");
+      
+      // ⭐ ABRIR URL CON SOPORTE WEB Y MÓVIL
+      let opened = false;
+      
+      if (Platform.OS === 'web') {
+        // En web usar window.open
+        const ventana = window.open(response.paymentUrl, '_blank');
+        opened = ventana !== null;
+      } else {
+        // En móvil usar Linking
+        const canOpen = await Linking.canOpenURL(response.paymentUrl);
+        if (canOpen) {
+          await Linking.openURL(response.paymentUrl);
+          opened = true;
+        }
       }
 
-      await Linking.openURL(response.paymentUrl);
+      if (!opened) {
+        throw new Error("No se pudo abrir el enlace de pago");
+      }
 
-      setTimeout(() => {
-        Alert.alert(
-          "Completa tu pago",
-          "Se abrió MercadoPago.\n\nCuando termines, vuelve a la app y verifica el estado en 'Mis Pedidos'.",
-          [
-            { text: "Cancelar", style: "cancel" },
-            { text: "Ver Pedidos", onPress: () => router.push("/(tabs)/pedidos") },
-          ]
-        );
+      // Mostrar confirmación después de abrir MercadoPago
+      alertTimeoutRef.current = setTimeout(() => {
+        if (procesandoPago) {
+          if (Platform.OS === 'web') {
+            const irAPedidos = window.confirm(
+              "Completa tu pago\n\nSe abrió MercadoPago.\n\nCuando termines, vuelve a la app y verifica el estado en 'Mis Pedidos'."
+            );
+            if (irAPedidos) {
+              navigateToPedidos(router);
+            }
+          } else {
+            Alert.alert(
+              "Completa tu pago",
+              "Se abrió MercadoPago.\n\nCuando termines, vuelve a la app y verifica el estado en 'Mis Pedidos'.",
+              [
+                { text: "Cancelar", style: "cancel" },
+                { text: "Ver Pedidos", onPress: () => navigateToPedidos(router) },
+              ]
+            );
+          }
+        }
+        
+        alertTimeoutRef.current = null;
       }, ALERT_DELAY_MS);
+      
     } catch (error) {
+      // Limpiar timeout si hay error
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+        alertTimeoutRef.current = null;
+      }
+
       const errorMessage = error instanceof Error ? error.message : "Error desconocido";
 
       if (esPedidoDuplicado(errorMessage)) {
-        Alert.alert(
-          "Pago en Proceso",
-          "Ya tienes un pago en proceso para esta receta. Por favor, verifica el estado en 'Mis Pedidos'.",
-          [
-            { text: "Entendido", style: "cancel" },
-            { text: "Ver Pedidos", onPress: () => router.push("/(tabs)/pedidos") },
-          ]
-        );
+        if (Platform.OS === 'web') {
+          const irAPedidos = window.confirm(
+            "Pago en Proceso\n\nYa tienes un pago en proceso para esta receta. Por favor, verifica el estado en 'Mis Pedidos'."
+          );
+          if (irAPedidos) {
+            navigateToPedidos(router);
+          }
+        } else {
+          Alert.alert(
+            "Pago en Proceso",
+            "Ya tienes un pago en proceso para esta receta. Por favor, verifica el estado en 'Mis Pedidos'.",
+            [
+              { text: "Entendido", style: "cancel" },
+              { text: "Ver Pedidos", onPress: () => navigateToPedidos(router) },
+            ]
+          );
+        }
       } else {
         console.error("Error al procesar pago:", error);
-        Alert.alert("Error al procesar pago", errorMessage);
+        if (Platform.OS === 'web') {
+          window.alert(`Error al procesar pago: ${errorMessage}`);
+        } else {
+          Alert.alert("Error al procesar pago", errorMessage);
+        }
       }
     } finally {
       setProcesandoPago(false);
@@ -256,13 +345,13 @@ export function usePaymentLogic(
   }, [
     procesandoPago,
     direccionUsuario,
-    validarCotizacionDisponible,
+    cotizacion,
     crearPreferencia,
     router,
   ]);
 
-  // ==================== LÓGICA DEL BOTÓN ====================
-  const getTipoBoton = useCallback((): TipoBoton => {
+  // ==================== LÓGICA DEL BOTÓN (con useMemo) ====================
+  const tipoBoton = useMemo((): TipoBoton => {
     if (!pedidoExistente) return "pagar";
 
     const { estado, cotizacionId: pedidoCotizacionId } = pedidoExistente;
@@ -294,7 +383,7 @@ export function usePaymentLogic(
     pedidoExistente,
     errorPedido,
     estadoConfig: pedidoExistente ? getEstadoPedidoConfig(pedidoExistente.estado) : null,
-    tipoBoton: getTipoBoton(),
+    tipoBoton,
     handlePagar,
   };
 }

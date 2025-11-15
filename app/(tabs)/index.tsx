@@ -6,8 +6,7 @@ import {
   Text, 
   StyleSheet, 
   Pressable, 
-  ScrollView, 
-  Alert,
+  ScrollView,
   ActivityIndicator 
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,6 +14,8 @@ import { auth, db } from "../../src/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { globalStyles, colors } from "../../assets/styles";
+import { navigateToCargarReceta, replaceWithLogin } from "../../src/lib/navigationHelpers";
+
 
 export default function DashboardHome() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function DashboardHome() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.replace("../auth/login");
+        replaceWithLogin(router);
         return;
       }
   
@@ -49,7 +50,7 @@ export default function DashboardHome() {
   }, []);
 
   const handleUploadRecipe = () => {
-    router.push("/cargarReceta");
+    navigateToCargarReceta(router);
   };
 
   if (loading) {

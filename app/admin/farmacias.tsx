@@ -9,11 +9,13 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../assets/styles";
 import { db } from "../../src/lib/firebase";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import BackButton from "../../src/components/common/backbutton";
 
 interface FarmaciaItem {
   id: string;
@@ -40,9 +42,6 @@ export default function FarmaciasAdmin() {
 
       const farmaciasRef = collection(db, "farmacias");
       let q = query(farmaciasRef);
-
-      // Si tenés campo createdAt, podés usar:
-      // q = query(farmaciasRef, orderBy("createdAt", "desc"));
 
       const snapshot = await getDocs(q);
       const items: FarmaciaItem[] = [];
@@ -92,7 +91,9 @@ export default function FarmaciasAdmin() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <BackButton />
+      
       <Text style={styles.title}>🏥 Lista de Farmacias</Text>
 
       {loading && (
@@ -125,7 +126,7 @@ export default function FarmaciasAdmin() {
         <Ionicons name="add-circle-outline" size={22} color="white" />
         <Text style={styles.addButtonText}>Agregar Farmacia</Text>
       </Pressable>
-    </View>
+    </SafeAreaView>
   );
 }
 

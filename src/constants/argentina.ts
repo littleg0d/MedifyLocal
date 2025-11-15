@@ -28,11 +28,18 @@ export const PROVINCIAS = [
   
   export const OBRAS_SOCIALES = [
     "Seleccioná tu obra social",
+    "Sin obra social",        
     "OSDE",
     "Swiss Medical",
     "Galeno",
-    "OSECAC",
-    "OSPEDYC",
+    "Medifé",
     "IOMA",
     "PAMI",
+    "Unión Personal",
+    "Accord Salud",
+    "Avalian",
+    "Federada Salud",
+    "Medicus",
+    "Omint",
+    "Sancor Salud",
   ];

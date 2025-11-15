@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { globalStyles, colors } from "../../assets/styles";
 import { Pedido, DetallePedido } from "../../assets/types";
 
-// Helpers centralizados
+import { Badge } from "../components/common/badge";
 import { getEstadoPedidoBadge, puedeReintentarPago } from "../lib/estadosHelpers";
 import { formatDate, formatCurrency } from "../lib/formatHelpers";
 
@@ -64,17 +64,13 @@ export function PedidoCard({
           </View>
 
           <View style={styles.cardBody}>
-            <View style={[globalStyles.badge, { backgroundColor: badge.bg }]}>
-              <Ionicons
-                name={badge.icon as any}
-                size={14}
-                color={badge.color}
-                style={styles.badgeIcon}
-              />
-              <Text style={[globalStyles.badgeText, { color: badge.color }]}>
-                {badge.label}
-              </Text>
-            </View>
+          <Badge
+            icon={badge.icon as any}
+            backgroundColor={badge.bg}
+            textColor={badge.color}
+            text={badge.label}
+            size="small"
+            />
             <Text style={styles.precio}>{formatCurrency(pedido.precio)}</Text>
           </View>
         </View>
@@ -278,9 +274,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  badgeIcon: {
-    marginRight: 4,
   },
   precio: {
     fontSize: 20,

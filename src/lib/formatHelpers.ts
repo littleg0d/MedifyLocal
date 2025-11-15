@@ -8,6 +8,7 @@ import { Address } from "../../assets/types";
  * Formatea una fecha en formato legible en español
  * Ejemplo: "13 de Noviembre, 2025"
  */
+
 export function formatDate(date: Date): string {
   const meses = [
     "Enero",
@@ -216,3 +217,15 @@ export function capitalizeWords(text: string): string {
     .map((word) => capitalize(word))
     .join(" ");
 }
+
+
+
+// Delay para mostrar alert después de abrir MercadoPago
+export const ALERT_DELAY_MS = 1000;
+
+/**
+ * Confirma si un error es de pedido duplicado
+ */
+export function esPedidoDuplicado(errorMessage: string): boolean {
+    return errorMessage.includes("Ya existe un pedido en proceso");
+  }

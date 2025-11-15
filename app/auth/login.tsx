@@ -1,7 +1,6 @@
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -15,7 +14,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth, db } from "../../src/lib/firebase";
+import { auth } from "../../src/lib/firebase";
 import { globalStyles, colors } from "../../assets/styles";
 
 export default function Login() {
@@ -34,12 +33,6 @@ export default function Login() {
       return;
     }
 
-    // Modo admin directo
-    if (email.trim().toLowerCase() === "admin" && password === "admin") {
-      router.replace("/admin");
-      return;
-    }
-
     // Validar email con regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
@@ -55,44 +48,9 @@ export default function Login() {
 
     try {
       setLoading(true);
-      const userCred = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const uid = userCred.user.uid;
-
-      // 🔍 Verificar si está en farmacias
-      const farmaciaRef = doc(db, "farmacias", uid);
-      const farmaciaSnap = await getDoc(farmaciaRef);
-
-      if (farmaciaSnap.exists()) {
-        const data = farmaciaSnap.data();
-        if (data.role === "farmacia") {
-          router.replace("../farmacia");
-          return;
-        }
-      }
-      const adminRef = doc(db, "users", uid);
-      const adminSnap = await getDoc(adminRef);
-
-    if (adminSnap.exists()) {
-    const data = adminSnap.data();
-    if (data.role === "admin") {
-      router.replace("../admin");
-      return;
-     }
-    }
-      // 🔍 Si no está en farmacias, buscar en users
-      const userRef = doc(db, "users", uid);
-      const userSnap = await getDoc(userRef);
-
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        if (data.role === "patient") {
-          router.replace("/(tabs)");
-          return;
-        }
-      }
-
-      // 🔁 Si no tiene rol o no lo encontramos, ir al home de usuarios por defecto
-      router.replace("/(tabs)");
+      // Solo hacer login, el _layout.tsx se encarga de redirigir según el rol
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      // No hacer router.replace aquí, dejar que _layout.tsx maneje la redirección
     } catch (e: any) {
       const code = String(e?.code || "");
 

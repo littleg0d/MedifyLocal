@@ -20,8 +20,6 @@ import { auth, db } from "../../src/lib/firebase";
 import { globalStyles, colors } from "../../assets/styles";
 import { PROVINCIAS, OBRAS_SOCIALES } from "../../src/constants/argentina";
 
-
-
 export default function Register() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -44,12 +42,13 @@ export default function Register() {
   const [obraSocial, setObraSocial] = useState("Seleccioná tu obra social");
   const [numeroObraSocial, setNumeroObraSocial] = useState("");
 
+  // ✅ Verificar si debe habilitar el campo de número
+  const debeIngresarNumero = obraSocial !== "Seleccioná tu obra social" && obraSocial !== "Sin obra social";
+
   // Función para formatear fecha automáticamente
   const handleDateChange = (text: string) => {
-    // Solo permitir números y /
     let cleaned = text.replace(/[^\d]/g, '');
     
-    // Formatear automáticamente
     if (cleaned.length >= 2) {
       cleaned = cleaned.slice(0, 2) + '/' + cleaned.slice(2);
     }
@@ -57,7 +56,6 @@ export default function Register() {
       cleaned = cleaned.slice(0, 5) + '/' + cleaned.slice(5);
     }
     
-    // Limitar a 10 caracteres (DD/MM/YYYY)
     setBirthDate(cleaned.slice(0, 10));
   };
 
@@ -70,12 +68,10 @@ export default function Register() {
     
     const [day, month, year] = dateString.split('/').map(Number);
     
-    // Validar rangos básicos
     if (month < 1 || month > 12) return false;
     if (day < 1 || day > 31) return false;
     if (year < 1900 || year > new Date().getFullYear()) return false;
     
-    // Validar fecha real
     const date = new Date(year, month - 1, day);
     return (
       date.getFullYear() === year &&
@@ -99,6 +95,15 @@ export default function Register() {
     return age;
   };
 
+  // ✅ Handler para cambiar obra social
+  const handleObraSocialChange = (value: string) => {
+    setObraSocial(value);
+    // Si selecciona "Sin obra social", limpiar el número
+    if (value === "Sin obra social") {
+      setNumeroObraSocial("");
+    }
+  };
+
   const onRegister = async () => {
     // Validaciones obligatorias
     if (!email.trim()) {
@@ -106,7 +111,6 @@ export default function Register() {
       return;
     }
 
-    // Validar email con regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
       Alert.alert("Error", "Email inválido");
@@ -128,7 +132,6 @@ export default function Register() {
       return;
     }
 
-    // Validar DNI (7 u 8 dígitos)
     if (!dni.trim() || !/^\d{7,8}$/.test(dni.trim())) {
       Alert.alert("Error", "DNI inválido (debe tener 7 u 8 dígitos)");
       return;
@@ -139,13 +142,11 @@ export default function Register() {
       return;
     }
 
-    // Validar fecha real
     if (!validateDate(birthDate)) {
       Alert.alert("Error", "Fecha de nacimiento inválida");
       return;
     }
 
-    // Validar edad mínima (18 años)
     if (calculateAge(birthDate) < 18) {
       Alert.alert("Error", "Debés ser mayor de 18 años para registrarte");
       return;
@@ -166,18 +167,18 @@ export default function Register() {
       return;
     }
 
-    // Validar código postal (4 dígitos)
     if (!postalCode.trim() || !/^\d{4}$/.test(postalCode.trim())) {
       Alert.alert("Error", "Código postal inválido (debe tener 4 dígitos)");
       return;
     }
 
     if (obraSocial === "Seleccioná tu obra social") {
-      Alert.alert("Error", "Seleccioná tu obra social");
+      Alert.alert("Error", "Seleccioná tu obra social o 'Sin obra social'");
       return;
     }
 
-    if (!numeroObraSocial.trim()) {
+    // ✅ Validación de número SOLO si seleccionó una obra social (no "Sin obra social")
+    if (debeIngresarNumero && !numeroObraSocial.trim()) {
       Alert.alert("Error", "Ingresá tu número de afiliado");
       return;
     }
@@ -185,20 +186,18 @@ export default function Register() {
     try {
       setLoading(true);
 
-      // Crear cuenta
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email.trim(),
         password
       );
 
-      // Actualizar displayName
       await updateProfile(userCredential.user, {
-        displayName: `${firstName.trim()} ${lastName.trim()}`,  // ✅ Completo
+        displayName: `${firstName.trim()} ${lastName.trim()}`,
       });
 
-      // Guardar en Firestore
-      await setDoc(doc(db, "users", userCredential.user.uid), {
+      // ✅ Guardar obra social solo si seleccionó una
+      const userData: any = {
         email: email.trim(),
         displayName: `${firstName.trim()} ${lastName.trim()}`,
         role: "patient",
@@ -212,12 +211,18 @@ export default function Register() {
           province: province,
           postalCode: postalCode.trim(),
         },
-        obraSocial: {
+        createdAt: serverTimestamp(),
+      };
+
+      // ✅ Solo agregar obra social si NO seleccionó "Sin obra social"
+      if (obraSocial !== "Sin obra social") {
+        userData.obraSocial = {
           name: obraSocial,
           number: numeroObraSocial.trim(),
-        },
-        createdAt: serverTimestamp(),
-      });
+        };
+      }
+
+      await setDoc(doc(db, "users", userCredential.user.uid), userData);
 
       Alert.alert("¡Listo!", "Tu cuenta fue creada", [
         { text: "Continuar", onPress: () => router.replace("/(tabs)") }
@@ -362,13 +367,13 @@ export default function Register() {
               </Picker>
             </View>
 
-            {/* Obra social */}
+            {/* Obra social - OBLIGATORIO */}
             <Text style={styles.sectionTitle}>Obra Social *</Text>
 
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={obraSocial}
-                onValueChange={setObraSocial}
+                onValueChange={handleObraSocialChange}
                 style={styles.picker}
               >
                 {OBRAS_SOCIALES.map((o) => (
@@ -382,13 +387,18 @@ export default function Register() {
               </Picker>
             </View>
 
+            {/* ✅ Campo de número - DESHABILITADO si no tiene obra social o si eligió "Sin obra social" */}
             <TextInput
-              placeholder="Número de afiliado *"
+              placeholder={debeIngresarNumero ? "Número de afiliado *" : "No requerido"}
               value={numeroObraSocial}
               onChangeText={setNumeroObraSocial}
-              style={globalStyles.input}
+              style={[
+                globalStyles.input,
+                !debeIngresarNumero && styles.inputDisabledStyle
+              ]}
               keyboardType="numeric"
               placeholderTextColor={colors.textTertiary}
+              editable={debeIngresarNumero}
             />
 
             {/* Botón registrar */}
@@ -469,6 +479,10 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 50,
+  },
+  inputDisabledStyle: {
+    backgroundColor: colors.gray100,
+    color: colors.textTertiary,
   },
   loginContainer: {
     flexDirection: "row",

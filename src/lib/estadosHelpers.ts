@@ -124,6 +124,44 @@ export function getEstadoCotizacionConfig(estado: EstadoCotizacion) {
 export const obtenerBadgeCotizacion = getEstadoCotizacionConfig;
 
 // ============================================================================
+// CONFIGURACIÓN DE ESTADOS DE RECETA
+// ============================================================================
+
+export type EstadoReceta = 
+  | "esperando_respuestas" 
+  | "farmacias_respondiendo" 
+  | "finalizada";
+
+/**
+ * Obtiene la configuración visual para cada estado de receta
+ */
+export function getEstadoRecetaConfig(estado: EstadoReceta) {
+  const configs = {
+    esperando_respuestas: {
+      bg: colors.warning,
+      text: colors.warningDark,
+      label: "Esperando respuestas",
+    },
+    farmacias_respondiendo: {
+      bg: colors.successLight,
+      text: colors.successDark,
+      label: "Farmacias respondiendo",
+    },
+    finalizada: {
+      bg: colors.gray200,
+      text: colors.gray700,
+      label: "Finalizada",
+    },
+  };
+
+  return configs[estado] || {
+    bg: colors.gray100,
+    text: colors.textSecondary,
+    label: "Desconocido",
+  };
+}
+
+// ============================================================================
 // VALIDACIONES DE ESTADO
 // ============================================================================
 

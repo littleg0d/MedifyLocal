@@ -10,6 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "../../src/lib/firebase";
 import { colors } from "../../assets/styles";
+import BackButton from "../../src/components/common/backbutton";
 
 type UserItem = {
   id: string;
@@ -75,6 +76,7 @@ export default function UsuariosScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <View style={styles.container}>
+      <BackButton />
         <Text style={styles.title}>Usuarios registrados</Text>
 
         {loading && (

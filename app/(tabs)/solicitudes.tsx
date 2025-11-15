@@ -1,16 +1,15 @@
 import { useState } from "react";
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, StyleSheet } from "react-native";
+import { View, Text, ScrollView, Pressable, Alert, StyleSheet  } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 
 import { globalStyles, colors } from "../../assets/styles";
 import { Cotizacion, Farmacia } from "../../assets/types";
-
-import { useCotizaciones, useUltimoPedidoPorReceta} from "../../src/lib/firebasehooks";
-import { recetaEstaBloqueada } from "../../src/solicitudes/helpers";
+import { navigateToPagar, navigateToPedidos, navigateToRecetas } from "../../src/lib/navigationHelpers";
+import { useCotizaciones, useUltimoPedidoPorReceta } from "../../src/lib/firestoreHooks";
+import { recetaEstaBloqueada } from "../../src/lib/estadosHelpers";
 import { BannerBloqueo, TarjetaCotizacion, DetalleFarmacia } from "../../src/solicitudes/components";
-
+import { LoadingScreen, ErrorScreen, HeaderWithBack,EmptyState, ListContainer, ContentScrollView} from "../../src/components/common";
 export default function Solicitudes() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -18,7 +17,7 @@ export default function Solicitudes() {
 
   // Hooks primero
   const { pedido: pedidoActivo, loading: loadingPedido } = useUltimoPedidoPorReceta(recetaId);
-  const { cotizaciones, loading: loadingCotizaciones, error:errorCotizaciones, } = useCotizaciones(recetaId);
+  const { cotizaciones, loading: loadingCotizaciones, error: errorCotizaciones } = useCotizaciones(recetaId);
 
   const [filtroConStock, setFiltroConStock] = useState(false);
   const [farmaciaSeleccionada, setFarmaciaSeleccionada] = useState<Farmacia | null>(null);
@@ -32,13 +31,7 @@ export default function Solicitudes() {
       return;
     }
 
-    router.push({
-      pathname: "/pagar",
-      params: {
-        recetaId: recetaId,
-        cotizacionId: cotizacion.id,
-      },
-    });
+    navigateToPagar(router, recetaId, cotizacion.id);
   };
 
   const mostrarAlertaBloqueo = (pedido: any) => {
@@ -50,7 +43,7 @@ export default function Solicitudes() {
         `Ya compraste este medicamento en ${nombreComercialFarmacia}. Puedes ver el estado en 'Mis Pedidos'.`,
         [
           { text: "Cancelar", style: "cancel" },
-          { text: "Ver Pedidos", onPress: () => router.push("/(tabs)/pedidos") },
+          { text: "Ver Pedidos", onPress: () =>navigateToPedidos(router) },
         ]
       );
     } else {
@@ -59,7 +52,7 @@ export default function Solicitudes() {
         `Ya tienes un pago en proceso para esta receta en ${nombreComercialFarmacia}.\n\nPor favor verifica el estado del pago.`,
         [
           { text: "Entendido", style: "cancel" },
-          { text: "Ver Estado", onPress: () => router.push("/(tabs)/pedidos") },
+          { text: "Ver Estado", onPress: () => navigateToPedidos(router) },
         ]
       );
     }
@@ -76,59 +69,34 @@ export default function Solicitudes() {
 
   const loading = loadingPedido || loadingCotizaciones;
 
-  if (loading) {
-    return (
-      <SafeAreaView style={globalStyles.container}>
-        <View style={globalStyles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={globalStyles.loadingText}>Cargando solicitudes...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-  // COMPROBAMOS EL ERROR ANTES DE RENDERIZAR LA LISTA
-  if (errorCotizaciones) {
-    return (
-      <SafeAreaView style={globalStyles.container}>
-      {/* Podemos reusar el header si queremos */}
-      <View style={globalStyles.headerWithBorder}>
-      <Pressable onPress={() => router.push("/(tabs)/recetas")} style={styles.backButton}>
-      <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-      </Pressable>
-      <Text style={globalStyles.titleSmall}>Farmacias Cercanas</Text>
-       <View style={styles.placeholder} />
-      </View>
+ 
+  if (loading) return <LoadingScreen message="Cargando solicitudes..." />;
 
- {/* Mensaje de Error */}
-  <View style={globalStyles.emptyContainer}>
-    <Ionicons
-    name="cloud-offline-outline"
-    size={64}
-    color={colors.errorDark} 
-  />
-    <Text style={globalStyles.emptyTitle}>Error de Conexión</Text>
-    <Text style={globalStyles.emptyText}>
-     No pudimos cargar las cotizaciones. Por favor, revisa tu conexión.
-    </Text>
-    </View>
-    </SafeAreaView>
-    );
-    }
-  // ============================================
+if (errorCotizaciones) {
+  return (
+    <ErrorScreen
+      title="Error de Conexión"
+      message="No pudimos cargar las cotizaciones. Por favor, revisa tu conexión."
+      header={
+        <HeaderWithBack
+          title="Farmacias Cercanas"
+          onBack={() => navigateToRecetas(router)}
+        />
+      }
+    />
+  );}
+
   return (
     <SafeAreaView style={globalStyles.container} edges={["top"]}>
-      <View style={globalStyles.headerWithBorder}>
-        <Pressable onPress={() => router.push("/(tabs)/recetas")} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={globalStyles.titleSmall}>Farmacias Cercanas</Text>
-        <View style={styles.placeholder} />
-      </View>
+    <HeaderWithBack
+  title="Farmacias Cercanas"
+  onBack={() => navigateToRecetas(router)}
+/>
 
       {bloqueada && pedidoActivo && (
         <BannerBloqueo
           pedido={pedidoActivo}
-          onVerEstado={() => router.push("/(tabs)/pedidos")}
+          onVerEstado={() =>navigateToPedidos(router)}
         />
       )}
 
@@ -147,19 +115,20 @@ export default function Solicitudes() {
         </Pressable>
       </View>
 
-      <ScrollView style={styles.scrollView}>
-        {cotizacionesFiltradas.length === 0 ? (
-          <View style={globalStyles.emptyContainer}>
-            <Ionicons name="file-tray-outline" size={64} color={colors.textTertiary} />
-            <Text style={globalStyles.emptyTitle}>Sin solicitudes</Text>
-            <Text style={globalStyles.emptyText}>
-              {filtroConStock
-                ? "No hay farmacias con stock disponible aún"
-                : "Aún no hay respuestas de farmacias"}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.listContainer}>
+      <ContentScrollView>
+      {cotizacionesFiltradas.length === 0 ? (
+  <EmptyState
+    icon="file-tray-outline"
+    title="Sin solicitudes"
+    message={
+      filtroConStock
+        ? "No hay farmacias con stock disponible aún"
+        : "Aún no hay respuestas de farmacias"
+    }
+    iconColor={colors.textTertiary}
+  />
+) : (
+  <ListContainer>
             {cotizacionesFiltradas.map((cotizacion) => (
               <TarjetaCotizacion
                 key={cotizacion.id}
@@ -170,10 +139,10 @@ export default function Solicitudes() {
                 onVerDetalles={handleVerDetalles}
               />
             ))}
-          </View>
+          </ListContainer>
         )}
         <View style={globalStyles.spacer} />
-      </ScrollView>
+      </ContentScrollView>
 
       <DetalleFarmacia
         visible={modalVisible}
@@ -183,18 +152,7 @@ export default function Solicitudes() {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  placeholder: {
-    width: 40,
-    height: 40,
-  },
   filterContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -208,12 +166,5 @@ const styles = StyleSheet.create({
   filterLabel: {
     fontSize: 16,
     color: colors.textPrimary,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  listContainer: {
-    padding: 16,
-    gap: 16,
-  },
+  }
 });
