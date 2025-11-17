@@ -10,11 +10,18 @@ interface PaymentStatusListenerProps {
 }
 
 /**
+ * 💡 SOLUCIÓN:
+ * Usamos un 'Set' de JavaScript en lugar de 'sessionStorage'.
+ * Esto funciona en todas las plataformas (Web, iOS, Android)
+ * y mantiene la lógica de "sesión" (se borra si la app se reinicia).
+ */
+const shownModalPedidos = new Set<string>();
+
+/**
  * Hook para detectar cambios de estado del pedido en tiempo real
- * 
- * - Detecta transiciones de estado (pendiente -> pagado/rechazado)
+ * * - Detecta transiciones de estado (pendiente -> pagado/rechazado)
  * - Muestra el modal SOLO UNA VEZ por pedido
- * - Persiste el estado entre recargas usando sessionStorage
+ * - Persiste el estado entre recargas usando un Set en memoria
  */
 export function usePaymentStatusListener({
   pedidoExistente,
@@ -58,11 +65,8 @@ export function usePaymentStatusListener({
       return;
     }
 
-    // Clave única para este pedido en sessionStorage
-    const storageKey = `modal_shown_${pedidoId}`;
-    
-    // Verificar si ya mostramos el modal para este pedido
-    const yaSeVioModal = sessionStorage.getItem(storageKey) === 'true';
+    // 💡 CAMBIO: Usar el 'Set' en lugar de sessionStorage
+    const yaSeVioModal = shownModalPedidos.has(pedidoId);
 
     // CASO 1: Primera renderización en esta sesión
     if (isFirstRenderRef.current) {
@@ -75,11 +79,11 @@ export function usePaymentStatusListener({
       if (!yaSeVioModal) {
         if (estadoActual === "pagado") {
           console.log("✅ Pedido ya pagado al cargar - Mostrando modal de éxito");
-          sessionStorage.setItem(storageKey, 'true');
+          shownModalPedidos.add(pedidoId); // 💡 CAMBIO
           onPaymentSuccess();
         } else if (PAYMENT_CONFIG.ESTADOS_FALLIDOS.includes(estadoActual as any)) {
           console.log("❌ Pedido rechazado al cargar - Mostrando modal de error");
-          sessionStorage.setItem(storageKey, 'true');
+          shownModalPedidos.add(pedidoId); // 💡 CAMBIO
           onPaymentFailed();
         }
       } else {
@@ -96,11 +100,11 @@ export function usePaymentStatusListener({
       if (!yaSeVioModal) {
         if (estadoActual === "pagado") {
           console.log("✅ Pago exitoso - Mostrando modal");
-          sessionStorage.setItem(storageKey, 'true');
+          shownModalPedidos.add(pedidoId); // 💡 CAMBIO
           onPaymentSuccess();
         } else if (PAYMENT_CONFIG.ESTADOS_FALLIDOS.includes(estadoActual as any)) {
           console.log("❌ Pago rechazado - Mostrando modal");
-          sessionStorage.setItem(storageKey, 'true');
+          shownModalPedidos.add(pedidoId); // 💡 CAMBIO
           onPaymentFailed();
         } else {
           console.log(`ℹ️ Cambio a estado intermedio: ${estadoActual}`);
