@@ -1,40 +1,49 @@
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { View, Text, ActivityIndicator } from "react-native";
 import { useEffect, useState } from "react";
 import { auth, db } from "../../src/lib/firebase"; 
 import { doc, getDoc } from "firebase/firestore"; 
+
+/**
+ * Auth Guard para el /admin group.
+ * 1. Verifica si hay usuario.
+ * 2. Verifica si el rol del usuario es 'admin'.
+ * 3. Redirige si alguna verificacion falla.
+ */
 export default function AdminLayout() {
   const router = useRouter();
   
   const [loadingRole, setLoadingRole] = useState(true);
   const [role, setRole] = useState<string | null>(null);
 
-  // Lógica para obtener el rol del usuario actual
+  // 1. Logica para obtener el rol
   useEffect(() => {
     const user = auth.currentUser;
     setLoadingRole(true);
 
     if (!user) {
       setLoadingRole(false);
-      setRole(null); // No hay usuario
+      setRole(null);
       return;
     }
 
     const fetchRole = async () => {
       try {
         const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
+        const userSnap = await getDoc(userRef); // ✅ Firebase Interaction
 
         if (userSnap.exists()) {
-          setRole(userSnap.data().role || "patient");
+          const userRole = userSnap.data().role || "patient";
+          setRole(userRole);
         } else {
-          // Si no está en users, asumir un rol por defecto o no permitido
+          // Usuario existe en Auth pero no en /users (raro, pero posible)
+          console.log("[AdminLayout] Usuario existe en Auth pero sin doc en 'users'. Asignando 'unknown'."); // ✅ Firebase (Validation)
           setRole("unknown"); 
         }
       } catch (e) {
-        console.error("Error al cargar rol:", e);
+        console.log(" ❌❌❌❌ [AdminLayout] Error al cargar rol:", e); // ✅ Firebase Error
         setRole("error");
       } finally {
         setLoadingRole(false);
@@ -44,26 +53,29 @@ export default function AdminLayout() {
     fetchRole();
   }, []);
 
-  // Lógica de Redirección
+  // 2. Logica de Redireccion
   useEffect(() => {
-    if (loadingRole) return;
-
+    if (loadingRole) {
+      return; // No hacer nada mientras carga
+    }
+    
     if (!auth.currentUser) {
       // 1. Si no hay usuario -> a Login
       router.replace("/auth/login");
     } else if (role !== "admin") {
-      // 2. Si el usuario existe pero no es admin -> a Home de usuarios
+      // 2. Si el usuario existe pero no es admin -> a Home
       router.replace("/(tabs)");
-    }
-    // Si role === 'admin', no hacemos nada y permitimos que se cargue el Stack
+    } 
+    // Si es admin, no hacemos nada, permitiendo que renderice el stack
+    
   }, [loadingRole, role]);
   
   // Pantalla de carga mientras se verifica el rol
   if (loadingRole) {
       return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'white' }}>
           <ActivityIndicator size="large" />
-          <Text>Verificando permisos de administración...</Text>
+          <Text style={{ marginTop: 10 }}>Verificando permisos de administracion...</Text>
         </View>
       );
   }
@@ -80,6 +92,5 @@ export default function AdminLayout() {
       );
   }
   
-  // No renderiza nada si la validación falla antes de la redirección
   return null;
 }

@@ -10,7 +10,7 @@ import {
   Query,
   DocumentData,
 } from "firebase/firestore";
-
+import { Receta } from "../../assets/types"
 import { db, auth } from "./firebase";
 import {
   Pedido,
@@ -133,15 +133,22 @@ export function usePedidosDelUsuario() {
 /**
  * Hook que obtiene el último pedido bloqueante de una receta específica en tiempo real
  */
+/**
+ * Hook que obtiene el último pedido de una receta específica en tiempo real
+ * ⚡ MODIFICADO: Ahora escucha TODOS los pedidos, no solo bloqueantes
+ */
 export function useUltimoPedidoPorReceta(recetaId: string | null) {
   const [pedido, setPedido] = useState<PedidoActivoReceta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    console.log("🔌 [useUltimoPedidoPorReceta] Iniciando listener para recetaId:", recetaId);
+    
     const userId = auth.currentUser?.uid;
 
     if (!userId || !recetaId) {
+      console.log("⚪ No hay userId o recetaId");
       setLoading(false);
       setPedido(null);
       return;
@@ -151,11 +158,13 @@ export function useUltimoPedidoPorReceta(recetaId: string | null) {
     setError(null);
 
     const pedidosRef = collection(db, "pedidos");
+    
+    // ⚡ CAMBIO CRÍTICO: Removemos el filtro "in" que limitaba a estados bloqueantes
+    // Ahora obtenemos el último pedido SIN importar su estado
     const q = query(
       pedidosRef,
       where("userId", "==", userId),
       where("recetaId", "==", recetaId),
-      where("estado", "in", [...PAYMENT_CONFIG.ESTADOS_BLOQUEANTES]),
       orderBy("fechaCreacion", "desc"),
       limit(1)
     );
@@ -163,7 +172,10 @@ export function useUltimoPedidoPorReceta(recetaId: string | null) {
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
+        console.log("📡 [useUltimoPedidoPorReceta] Snapshot recibido");
+        
         if (querySnapshot.empty) {
+          console.log("⚪ No hay pedidos para esta receta");
           setPedido(null);
           setLoading(false);
           return;
@@ -171,6 +183,13 @@ export function useUltimoPedidoPorReceta(recetaId: string | null) {
 
         const doc = querySnapshot.docs[0];
         const data = doc.data();
+
+        console.log("📦 Pedido encontrado:", {
+          id: doc.id,
+          estado: data.estado,
+          cotizacionId: data.cotizacionId,
+          nombreComercial: data.nombreComercial
+        });
 
         setPedido({
           id: doc.id,
@@ -185,14 +204,17 @@ export function useUltimoPedidoPorReceta(recetaId: string | null) {
         setLoading(false);
       },
       (err) => {
-        console.error("Error en useUltimoPedidoPorReceta:", err);
+        console.error("❌ [useUltimoPedidoPorReceta] Error:", err);
         setError(err);
         setPedido(null);
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      console.log("🔌 [useUltimoPedidoPorReceta] Cerrando listener");
+      unsubscribe();
+    };
   }, [recetaId]);
 
   return { pedido, loading, error };
@@ -256,9 +278,10 @@ export function useCotizaciones(recetaId: string | null) {
 
 /**
  * Hook que obtiene todas las recetas del usuario actual en tiempo real
+ * ✅ Ahora tipado correctamente con Receta
  */
 export function useRecetasDelUsuario() {
-  const [recetas, setRecetas] = useState<any[]>([]);
+  const [recetas, setRecetas] = useState<Receta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -284,7 +307,7 @@ export function useRecetasDelUsuario() {
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
-          const recetasData = querySnapshot.docs.map((doc) =>
+        const recetasData = querySnapshot.docs.map((doc) =>
           mapRecetaFromFirestore(doc.id, doc.data())
         );
         setRecetas(recetasData);

@@ -1,4 +1,3 @@
-// app/farmacia/recetas-sin-responder.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -28,40 +27,10 @@ import {
 } from "firebase/firestore";
 import { globalStyles, colors } from "../../assets/styles";
 import { API_URL } from "../../src/config/apiConfig";
+import { Receta, Address, ObraSocial } from "../../assets/types"; // ✅ Importar tipos de objetos
+import { formatObraSocial, formatDate, formatAddress } from "../../src/lib/formatHelpers";
 
-// Interface actualizada
-interface Receta {
-  id: string;
-  descripcion?: string;
-  direccion?: string;
-  estado?: string;
-  createdAt?: any;
-  pacienteId?: string;
-  imagenUrl?: string;
-  fechaCreacion?: any;
-  userName?: string;
-  userEmail?: string; // Agregado
-  userObraSocial?: {
-    name: string;
-    number?: string;
-  };
-  userPhone?: string;
-  userDNI?: string;
-}
-
-/**
- * Helper para formatear Obra Social
- */
-const formatObraSocial = (os?: { name: string; number?: string }) => {
-  if (!os || !os.name) {
-    return "Sin obra social";
-  }
-  if (os.number) {
-    return `${os.name} (${os.number})`;
-  }
-  return os.name;
-};
-
+// Pantalla para ver y responder recetas pendientes
 export default function RecetasSinResponder() {
   const router = useRouter();
 
@@ -78,28 +47,19 @@ export default function RecetasSinResponder() {
   const [refreshing, setRefreshing] = useState(false);
   const [farmaciaId, setFarmaciaId] = useState<string | null>(null);
 
-  // Modal
+  // Modal de respuesta
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedReceta, setSelectedReceta] = useState<Receta | null>(null);
   const [respuestaEstado, setRespuestaEstado] = useState<string>("cotizado");
   const [respuestaDescripcion, setRespuestaDescripcion] = useState("");
   const [respuestaPrecio, setRespuestaPrecio] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false); 
 
   // Zoom de imagen
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
-  // Corrección Modal
-  const [isOpeningModal, setIsOpeningModal] = useState(false);
-  useEffect(() => {
-    if (isOpeningModal) {
-      setModalVisible(true);
-      setIsOpeningModal(false);
-    }
-  }, [isOpeningModal]);
-  // ---
-
+  // Carga inicial
   useEffect(() => {
     loadFarmaciaAndRecetas();
   }, []);
@@ -112,22 +72,15 @@ export default function RecetasSinResponder() {
         return;
       }
 
-      const farmaciaRef = doc(db, "farmacias", user.uid);
-      const farmaciaSnap = await getDoc(farmaciaRef);
-
-      let fId = user.uid;
-      if (farmaciaSnap.exists()) {
-        fId = farmaciaSnap.id;
-      }
-
+      const fId = user.uid;
       setFarmaciaId(fId);
       await loadRecetas(fId);
     } catch (error) {
-      console.error("Error cargando farmacia:", error);
+      console.log("❌❌❌❌ Error cargando farmacia:", error); 
+      Alert.alert("Error", "No se pudo cargar la información de la farmacia");
     }
   };
 
-  // Función de carga eficiente (Promise.all)
   const loadRecetas = async (fId: string) => {
     try {
       if (!refreshing) {
@@ -136,56 +89,93 @@ export default function RecetasSinResponder() {
 
       const recetasRef = collection(db, "recetas");
 
-      // Paso 1: Traer solo recetas activas
       const q = query(
         recetasRef,
         where("estado", "in", ["esperando_respuestas", "farmacias_respondiendo"])
       );
-      const snapshot = await getDocs(q);
+      
+      const snapshot = await getDocs(q); 
 
-      // Paso 2: Crear promesas para verificar respuestas en paralelo
-      const promises = snapshot.docs.map(recetaDoc => {
-        const farmaciaRespondioRef = doc(
-          db,
-          "recetas",
-          recetaDoc.id,
-          "farmaciasRespondieron",
-          fId
-        );
-        return getDoc(farmaciaRespondioRef);
-      });
+      if (snapshot.size === 0) {
+        setRecetas([]);
+        return;
+      }
 
-      // Paso 3: Ejecutar todas las verificaciones juntas
-      const farmaciaRespondioSnaps = await Promise.all(promises);
-
-      // Paso 4: Procesar resultados
-      const recetasSinResponder: Receta[] = [];
-      farmaciaRespondioSnaps.forEach((farmaciaRespondioSnap, index) => {
-        // Si el documento NO existe, significa que no hemos respondido
-        if (!farmaciaRespondioSnap.exists()) {
-          const recetaDoc = snapshot.docs[index];
-          const recetaData = recetaDoc.data();
-
-          recetasSinResponder.push({
+      const recetasPromises = snapshot.docs.map(async (recetaDoc) => {
+        const recetaData = recetaDoc.data();
+        
+        try {
+          const respuestaRef = doc(db, "recetas", recetaDoc.id, "farmaciasRespondieron", fId);
+          const respuestaSnap = await getDoc(respuestaRef); 
+          
+          const yaRespondio = respuestaSnap.exists();
+          
+          if (yaRespondio) {
+            return null; 
+          }
+          
+          // Mapear la receta
+          return {
             id: recetaDoc.id,
-            ...recetaData, // Datos base (incluye userName, userEmail, fechaCreacion)
-            // Mapeo de campos actualizados
-            userObraSocial: recetaData.userObraSocial,
+            userId: recetaData.userId || "",
+            userName: recetaData.userName || "Usuario",
+            userEmail: recetaData.userEmail || "",
             userDNI: recetaData.userDNI,
             userPhone: recetaData.userPhone,
-            direccion: recetaData.userAddress
-              ? `${recetaData.userAddress.street}, ${recetaData.userAddress.city}`
-              : undefined,
-          } as Receta);
+            userAddress: (recetaData.userAddress || undefined) as Address | undefined, 
+            userObraSocial: (recetaData.userObraSocial || undefined) as ObraSocial | undefined,
+            imagenUrl: recetaData.imagenUrl || "",
+            imagenPath: recetaData.imagenPath,
+            imagenNombre: recetaData.imagenNombre,
+            imagenSize: recetaData.imagenSize,
+            estado: recetaData.estado || "esperando_respuestas",
+            cotizacionesCount: recetaData.cotizacionesCount || 0,
+            fechaCreacion: recetaData.fechaCreacion,
+            // ❌ REMOVIDA: descripcion: recetaData.descripcion, 
+          } as Receta;
+        } catch (error) {
+          console.log(`❌ Error verificando respuesta para receta ${recetaDoc.id}:`, error); 
+          // Si hay error, incluir la receta por defecto
+          return {
+            id: recetaDoc.id,
+            userId: recetaData.userId || "",
+            userName: recetaData.userName || "Usuario",
+            userEmail: recetaData.userEmail || "",
+            userDNI: recetaData.userDNI,
+            userPhone: recetaData.userPhone,
+            userAddress: (recetaData.userAddress || undefined) as Address | undefined, 
+            userObraSocial: (recetaData.userObraSocial || undefined) as ObraSocial | undefined, 
+            imagenUrl: recetaData.imagenUrl || "",
+            imagenPath: recetaData.imagenPath,
+            imagenNombre: recetaData.imagenNombre,
+            imagenSize: recetaData.imagenSize,
+            estado: recetaData.estado || "esperando_respuestas",
+            cotizacionesCount: recetaData.cotizacionesCount || 0,
+            fechaCreacion: recetaData.fechaCreacion,
+            // ❌ REMOVIDA: descripcion: recetaData.descripcion, 
+          } as Receta;
         }
+      });
+
+      const recetasResults = await Promise.all(recetasPromises);
+      
+      const recetasSinResponder = recetasResults.filter(
+        (receta): receta is Receta => receta !== null
+      );
+      
+      recetasSinResponder.sort((a, b) => {
+        if (!a.fechaCreacion || !b.fechaCreacion) return 0;
+        const aTime = a.fechaCreacion.seconds || 0;
+        const bTime = b.fechaCreacion.seconds || 0;
+        return bTime - aTime;
       });
 
       setRecetas(recetasSinResponder);
     } catch (error) {
-      console.error("Error cargando recetas:", error);
+      console.log("❌❌❌❌ Error cargando recetas:", error); 
       Alert.alert(
         "Error de consulta",
-        "No se pudieron cargar las recetas. Es posible que falte un índice en Firestore (sobre el campo 'estado'). Revisa la consola."
+        "No se pudieron cargar las recetas. Por favor intenta de nuevo."
       );
     } finally {
       setLoading(false);
@@ -200,13 +190,12 @@ export default function RecetasSinResponder() {
     }
   };
 
-  // Corrección Modal
   const handleResponder = (receta: Receta) => {
     setSelectedReceta(receta);
-    setRespuestaEstado("cotizado");
+    setRespuestaEstado("cotizado"); 
     setRespuestaDescripcion("");
     setRespuestaPrecio("");
-    setIsOpeningModal(true); // <-- Activa el trigger
+    setModalVisible(true);
   };
 
   const handleImageZoom = (imageUrl: string) => {
@@ -214,52 +203,35 @@ export default function RecetasSinResponder() {
     setImageZoomVisible(true);
   };
 
-  const formatDate = (timestamp?: any) => {
-    if (!timestamp) return "Fecha no disp.";
-    try {
-      const date = timestamp.seconds
-        ? new Date(timestamp.seconds * 1000)
-        : new Date(timestamp);
-      return date.toLocaleDateString("es-AR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return "Fecha inválida";
-    }
-  };
-
   const getRecetaTitle = (receta: Receta) => {
     const userName = (receta.userName || "Usuario").toLowerCase();
     const recetaId = receta.id.slice(0, 8);
-    // Se quita la fecha del título, irá al modal
     return `${userName} - ${recetaId}`;
   };
 
   const handleEnviarRespuesta = async () => {
-    if (!selectedReceta || !farmaciaId) return;
-
+    if (!selectedReceta || !farmaciaId) {
+      return;
+    }
+    
     // Validaciones
     if (respuestaEstado === "cotizado") {
       if (!respuestaDescripcion.trim()) {
-        Alert.alert("Error", "Por favor ingresá una descripción");
+        Alert.alert("Error", "Por favor ingresá una descripción"); 
         return;
       }
       if (!respuestaPrecio.trim()) {
-        Alert.alert("Error", "Por favor ingresá un precio");
+        Alert.alert("Error", "Por favor ingresá un precio"); 
         return;
       }
 
       const precioNum = parseFloat(respuestaPrecio);
       if (isNaN(precioNum) || precioNum <= 0) {
-        Alert.alert("Error", "Por favor ingresá un precio válido mayor a 0");
+        Alert.alert("Error", "Por favor ingresá un precio válido mayor a 0"); 
         return;
       }
     }
-
+    
     try {
       setSubmitting(true);
 
@@ -279,9 +251,7 @@ export default function RecetasSinResponder() {
         body.precio = parseFloat(respuestaPrecio);
       }
 
-      console.log("📤 Enviando respuesta:", body);
-
-      const response = await fetch(`${API_URL}/api/responder-receta`, {
+      const response = await fetch(`${API_URL}/api/responder-receta`, { 
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -293,19 +263,19 @@ export default function RecetasSinResponder() {
         const errorData = await response.json().catch(() => ({
           error: "Error desconocido",
         }));
+        console.log(`❌ [handleEnviarRespuesta] Respuesta API NO OK: ${response.status}`, errorData); 
         throw new Error(errorData.error || `Error ${response.status}`);
       }
 
       const result = await response.json();
-      console.log("✅ Respuesta exitosa:", result);
 
       Alert.alert("Éxito", "Respuesta enviada correctamente");
       setModalVisible(false);
 
-      // Recargar la lista de recetas
       await loadRecetas(farmaciaId);
+
     } catch (error) {
-      console.error("❌ Error enviando respuesta:", error);
+      console.log("❌❌❌❌ Error enviando respuesta (API):", error); 
 
       const errorMessage =
         error instanceof Error
@@ -329,6 +299,7 @@ export default function RecetasSinResponder() {
         </View>
         <View style={styles.centerRow}>
           <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Cargando recetas...</Text>
         </View>
       </SafeAreaView>
     );
@@ -336,6 +307,7 @@ export default function RecetasSinResponder() {
 
   return (
     <SafeAreaView style={globalStyles.container} edges={["top", "bottom"]}>
+      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleBack}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
@@ -351,17 +323,19 @@ export default function RecetasSinResponder() {
         }
       >
         {recetas.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name="document-text-outline"
-              size={64}
-              color={colors.textTertiary}
-            />
-            <Text style={styles.emptyText}>No hay recetas sin responder</Text>
-            <Text style={styles.emptySubtext}>
-              Las recetas con cotizaciones aparecerán aquí
-            </Text>
-          </View>
+          <>
+            <View style={styles.emptyContainer}>
+              <Ionicons
+                name="document-text-outline"
+                size={64}
+                color={colors.textTertiary}
+              />
+              <Text style={styles.emptyText}>No hay recetas sin responder</Text>
+              <Text style={styles.emptySubtext}>
+                Las nuevas recetas aparecerán aquí
+              </Text>
+            </View>
+          </>
         ) : (
           <View style={styles.recetasList}>
             {recetas.map((receta) => (
@@ -385,30 +359,24 @@ export default function RecetasSinResponder() {
 
                 <Text style={styles.recetaId}>{getRecetaTitle(receta)}</Text>
 
-                {/* (Se quitaron DNI, OS y Teléfono de aquí) */}
+                {/* Descripcion (opcional) de la receta */}
+                {/* ❌ REMOVIDO: {receta.descripcion && ( */}
 
-                {receta.descripcion && (
-                  <View style={styles.infoRow}>
-                    <Ionicons
-                      name="document-text-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
-                    <Text style={styles.infoText}>{receta.descripcion}</Text>
-                  </View>
-                )}
-
-                {receta.direccion && (
+                {/* Direccion de entrega del paciente */}
+                {receta.userAddress && (
                   <View style={styles.infoRow}>
                     <Ionicons
                       name="location-outline"
                       size={18}
                       color={colors.textTertiary}
                     />
-                    <Text style={styles.infoText}>{receta.direccion}</Text>
+                    <Text style={styles.infoText}>
+                      {formatAddress(receta.userAddress)}
+                    </Text>
                   </View>
                 )}
 
+                {/* Boton para abrir modal */}
                 <Pressable
                   style={({ pressed }) => [
                     styles.responderButton,
@@ -427,22 +395,23 @@ export default function RecetasSinResponder() {
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      {/* Modal de respuesta */}
+      {/* ==================== MODAL DE RESPUESTA ==================== */}
       <Modal
         visible={modalVisible}
-        transparent
+        transparent={false}
         animationType="slide"
         onRequestClose={() => !submitting && setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <SafeAreaView style={styles.modalContainer} edges={["top"]}>
           <View style={styles.modalContent}>
+            {/* Header del Modal */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Responder Receta</Text>
               <Pressable
                 onPress={() => !submitting && setModalVisible(false)}
                 disabled={submitting}
               >
-                <Ionicons name="close" size={24} color={colors.textPrimary} />
+                <Ionicons name="close" size={28} color={colors.textPrimary} />
               </Pressable>
             </View>
 
@@ -465,11 +434,10 @@ export default function RecetasSinResponder() {
                 </Pressable>
               )}
 
-              {/* ✅ DATOS DEL PACIENTE MOVIDOS AL MODAL */}
+              {/* Datos del Paciente en el Modal */}
               <View style={styles.infoCardModal}>
                 <Text style={styles.infoCardTitle}>Datos del Paciente</Text>
 
-                {/* Nombre */}
                 {selectedReceta?.userName && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -483,7 +451,6 @@ export default function RecetasSinResponder() {
                   </View>
                 )}
 
-                {/* Email */}
                 {selectedReceta?.userEmail && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -497,7 +464,6 @@ export default function RecetasSinResponder() {
                   </View>
                 )}
 
-                {/* Obra Social */}
                 <View style={styles.infoRow}>
                   <Ionicons
                     name="medical-outline"
@@ -509,7 +475,6 @@ export default function RecetasSinResponder() {
                   </Text>
                 </View>
 
-                {/* DNI */}
                 {selectedReceta?.userDNI && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -523,7 +488,6 @@ export default function RecetasSinResponder() {
                   </View>
                 )}
 
-                {/* Telefono */}
                 {selectedReceta?.userPhone && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -537,8 +501,8 @@ export default function RecetasSinResponder() {
                   </View>
                 )}
 
-                {/* Direccion */}
-                {selectedReceta?.direccion && (
+                {/* Direccion de entrega del paciente */}
+                {selectedReceta?.userAddress && (
                   <View style={styles.infoRow}>
                     <Ionicons
                       name="location-outline"
@@ -546,12 +510,12 @@ export default function RecetasSinResponder() {
                       color={colors.textTertiary}
                     />
                     <Text style={styles.infoText}>
-                      {selectedReceta.direccion}
+                      {formatAddress(selectedReceta.userAddress)}
                     </Text>
                   </View>
                 )}
 
-                {/* Fecha Creación Receta */}
+                {/* Fecha de creacion de la receta */}
                 {selectedReceta?.fechaCreacion && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -565,9 +529,8 @@ export default function RecetasSinResponder() {
                   </View>
                 )}
               </View>
-              {/* --- FIN DE DATOS DEL PACIENTE --- */}
 
-              {/* Estado */}
+              {/* Estado de la respuesta */}
               <Text style={styles.label}>Estado *</Text>
               <View style={styles.estadoButtons}>
                 {[
@@ -598,13 +561,13 @@ export default function RecetasSinResponder() {
                 ))}
               </View>
 
-              {/* Descripción (solo si está cotizado) */}
+              {/* Descripcion (solo si cotizado) */}
               {respuestaEstado === "cotizado" && (
                 <>
                   <Text style={styles.label}>Descripción *</Text>
                   <TextInput
                     style={[globalStyles.input, styles.textArea]}
-                    placeholder="Ingresá una descripción"
+                    placeholder="Ingresá una descripción del medicamento"
                     value={respuestaDescripcion}
                     onChangeText={setRespuestaDescripcion}
                     multiline
@@ -615,7 +578,7 @@ export default function RecetasSinResponder() {
                 </>
               )}
 
-              {/* Precio (solo si está cotizado) */}
+              {/* Precio (solo si cotizado) */}
               {respuestaEstado === "cotizado" && (
                 <>
                   <Text style={styles.label}>Precio *</Text>
@@ -628,9 +591,10 @@ export default function RecetasSinResponder() {
                     editable={!submitting}
                     placeholderTextColor={colors.textTertiary}
                   />
+                  {/* Preview del precio formateado */}
                   {respuestaPrecio.trim() && (
                     <View style={styles.precioPreview}>
-                      <Text style={styles.precioPreviewLabel}>Precio:</Text>
+                      <Text style={styles.precioPreviewLabel}>Precio Final:</Text>
                       <Text style={styles.precioPreviewValue}>
                         $
                         {parseFloat(respuestaPrecio || "0").toLocaleString(
@@ -646,25 +610,38 @@ export default function RecetasSinResponder() {
                 </>
               )}
 
+              {/* Boton de envio */}
               <Pressable
                 style={({ pressed }) => [
                   globalStyles.primaryButton,
-                  pressed && globalStyles.buttonPressed,
+                  {marginTop:24},
+                  pressed && !submitting && globalStyles.buttonPressed,
                   submitting && globalStyles.buttonDisabled,
                 ]}
                 onPress={handleEnviarRespuesta}
                 disabled={submitting}
               >
-                <Text style={globalStyles.primaryButtonText}>
-                  {submitting ? "Enviando..." : "Enviar Respuesta"}
-                </Text>
+                {submitting ? (
+                  <View style={styles.buttonContent}>
+                    <ActivityIndicator size="small" color="white" />
+                    <Text style={[globalStyles.primaryButtonText, { marginLeft: 8 }]}>
+                      Enviando...
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={globalStyles.primaryButtonText}>
+                    Enviar Respuesta
+                  </Text>
+                )}
               </Pressable>
+
+              <View style={{ height: 40 }} />
             </ScrollView>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
 
-      {/* Modal de zoom de imagen */}
+      {/* ==================== MODAL DE ZOOM ==================== */}
       <Modal
         visible={imageZoomVisible}
         transparent
@@ -719,6 +696,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
   emptyContainer: {
     alignItems: "center",
@@ -738,6 +720,7 @@ const styles = StyleSheet.create({
   },
   recetasList: {
     gap: 12,
+    padding: 16,
   },
   recetaCard: {
     backgroundColor: colors.surface,
@@ -746,6 +729,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   recetaId: {
     fontSize: 16,
@@ -779,87 +767,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "white",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: "90%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.textPrimary,
-  },
-
-  // ESTILOS PARA LA TARJETA EN EL MODAL
-  infoCardModal: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
-    marginBottom: 16,
-  },
-  infoCardTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  // ---
-
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.textPrimary,
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  estadoButtons: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 8,
-  },
-  estadoButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    minWidth: 100,
-    alignItems: "center",
-  },
-  estadoButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  estadoButtonText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.textSecondary,
-  },
-  estadoButtonTextActive: {
-    color: "white",
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: "top",
-  },
   imageContainer: {
     width: "100%",
     height: 200,
@@ -867,6 +774,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 12,
     position: "relative",
+    backgroundColor: colors.surface,
   },
   thumbnailImage: {
     width: "100%",
@@ -879,6 +787,34 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     borderRadius: 20,
     padding: 6,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.surface,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    flex: 1,
+    backgroundColor: "white",
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.textPrimary,
   },
   modalImageContainer: {
     width: "100%",
@@ -910,28 +846,59 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  zoomModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.95)",
-    justifyContent: "center",
+  infoCardModal: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 12,
+    marginBottom: 16,
+  },
+  infoCardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textPrimary,
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  estadoButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  estadoButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    
     alignItems: "center",
   },
-  zoomModalClose: {
-    position: "absolute",
-    top: 50,
-    right: 20,
-    zIndex: 10,
+  estadoButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
-  zoomScrollContent: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    width: Dimensions.get("window").width,
-    height: Dimensions.get("window").height,
+  estadoButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.textSecondary,
   },
-  zoomImage: {
-    width: Dimensions.get("window").width,
-    height: Dimensions.get("window").height,
+  estadoButtonTextActive: {
+    color: "white",
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: "top",
   },
   precioInput: {
     fontSize: 20,
@@ -957,5 +924,32 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     color: colors.primary,
+  },
+  buttonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  zoomModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  zoomModalClose: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+  },
+  zoomScrollContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height,
+  },
+  zoomImage: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height,
   },
 });

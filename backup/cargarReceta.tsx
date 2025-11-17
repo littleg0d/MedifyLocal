@@ -4,7 +4,7 @@ import {
   Text, 
   TouchableOpacity, 
   Image, 
-  Alert, 
+  Alert,  
   StyleSheet,
   Platform,
   Modal,
@@ -25,7 +25,7 @@ import { AddressWithMetadata } from '../assets/types';
 
 export default function CargarRecetaScreen() {
   const router = useRouter();
-  const [imageAsset, setImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [addresses, setAddresses] = useState<AddressWithMetadata[]>([]);
@@ -48,7 +48,7 @@ export default function CargarRecetaScreen() {
       const mediaLibraryStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (cameraStatus.status !== 'granted' || mediaLibraryStatus.status !== 'granted') {
-        const mensaje = "Se necesitan permisos para la cámara y la galería para continuar.";
+        const mensaje = "Se necesitan permisos para la camara y la galeria para continuar.";
         if (Platform.OS === 'web') {
           window.alert(mensaje);
         } else {
@@ -61,15 +61,16 @@ export default function CargarRecetaScreen() {
   const loadAddresses = async () => {
     const user = auth.currentUser;
     if (!user) {
-      console.log("❌ [loadAddresses] No hay usuario autenticado.");
+      console.log("❌❌❌❌ [loadAddresses] No hay usuario autenticado.");
       return;
     }
 
     setLoadingAddresses(true);
     try {
+      
       const addressesRef = collection(db, 'users', user.uid, 'addresses');
       const q = query(addressesRef, orderBy('fechaCreacion', 'desc'));
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(q); // ✅ Firebase query
       
       const addressList: AddressWithMetadata[] = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -92,17 +93,17 @@ export default function CargarRecetaScreen() {
       }
 
       if (addressList.length === 0) {
-        const mensaje = "Primero debes configurar una dirección en tu perfil.";
+        const mensaje = "Primero debes configurar una direccion en tu perfil.";
         if (Platform.OS === 'web') {
           window.alert(mensaje);
         } else {
-          Alert.alert("Dirección requerida", mensaje);
+          Alert.alert("Direccion requerida", mensaje);
         }
         router.push('../(tabs)/perfil');
       }
 
     } catch (error) {
-      console.log("❌ Error cargando direcciones (Firebase):", error);
+      console.log("❌❌❌❌ Error cargando direcciones (Firebase):", error); // ✅ Firebase Error
       const mensaje = "No pudimos cargar tus direcciones.";
       Platform.OS === 'web' ? window.alert(mensaje) : Alert.alert("Error", mensaje);
     } finally {
@@ -118,8 +119,8 @@ export default function CargarRecetaScreen() {
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets.length > 0) {
-      setImageAsset(result.assets[0]);
+    if (!result.canceled) {
+      setUploadedImage(result.assets[0].uri);
       await loadAddresses();
     }
   };
@@ -132,34 +133,35 @@ export default function CargarRecetaScreen() {
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets.length > 0) {
-      setImageAsset(result.assets[0]);
+    if (!result.canceled) {
+      setUploadedImage(result.assets[0].uri);
       await loadAddresses();
     }
   };
 
   const onClearImage = () => {
-    setImageAsset(null);
+    setUploadedImage(null);
     setSelectedAddress(null);
     setAddresses([]);
   };
 
   const handleUploadRecipe = async () => {
-    if (!imageAsset || !imageAsset.uri) {
+    
+    if (!uploadedImage) {
       return;
     }
 
     const user = auth.currentUser;
     if (!user) {
-      console.log("❌ [handleUploadRecipe] No hay usuario autenticado.");
-      const mensaje = "Debes iniciar sesión para subir una receta.";
+      console.log("❌❌❌❌ [handleUploadRecipe] No hay usuario autenticado."); // ✅ Validación
+      const mensaje = "Debes iniciar sesion para subir una receta.";
       Platform.OS === 'web' ? window.alert(mensaje) : Alert.alert("Error", mensaje);
       return;
     }
 
     if (!selectedAddress) {
-      console.log("❌ [handleUploadRecipe] No hay dirección seleccionada.");
-      const mensaje = "Debes seleccionar una dirección de entrega.";
+      console.log("❌❌❌❌ [handleUploadRecipe] No hay direccion seleccionada."); // ✅ Validación
+      const mensaje = "Debes seleccionar una direccion de entrega.";
       Platform.OS === 'web' ? window.alert(mensaje) : Alert.alert("Error", mensaje);
       return;
     }
@@ -167,32 +169,34 @@ export default function CargarRecetaScreen() {
     setIsLoading(true);
 
     try {
+      
       const formData = new FormData();
       
       formData.append('userId', user.uid);
       formData.append('addressId', selectedAddress.id);
 
-      // Formato correcto del archivo según la plataforma
+      // Formato correcto del archivo segun la plataforma
       if (Platform.OS === 'web') {
         // Web: Convertir URI a Blob
-        const response = await fetch(imageAsset.uri);
+        const response = await fetch(uploadedImage);
         const blob = await response.blob();
-        formData.append('file', blob, imageAsset.fileName || `receta_${Date.now()}.jpg`);
+        formData.append('file', blob, `receta_${Date.now()}.jpg`);
       } else {
         // Mobile: Formato React Native
         const fileUri = Platform.OS === 'android' 
-          ? imageAsset.uri 
-          : imageAsset.uri.replace('file://', '');
+          ? uploadedImage 
+          : uploadedImage.replace('file://', '');
         
         formData.append('file', {
           uri: fileUri,
-          name: imageAsset.fileName || `receta_${Date.now()}.jpg`,
-          type: imageAsset.mimeType || 'image/jpeg',
+          name: `receta_${Date.now()}.jpg`,
+          type: 'image/jpeg',
         } as any);
       }
 
-      const endpoint = `${API_URL}/api/recetas/crear-con-imagen`;
+      const endpoint = `${API_URL}/api/recetas/crear-con-imagen`; // ✅ API URL
 
+      // Endpoint atomico: crea receta + sube imagen en una transaccion
       const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
@@ -200,7 +204,7 @@ export default function CargarRecetaScreen() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log(`❌ [handleUploadRecipe] Response NO OK de la API: ${errorText}`);
+        console.log(`❌❌❌❌ [handleUploadRecipe] Response NO OK de la API: ${errorText}`); // ✅ API Error
         
         let errorData;
         try {
@@ -212,9 +216,9 @@ export default function CargarRecetaScreen() {
         throw new Error(errorData.error || `Error ${response.status}: ${errorText}`);
       }
 
-      const result = await response.json();
+      const result = await response.json(); // ✅ API Success
       
-      const mensaje_exito = "Tu receta fue enviada. Recibirás notificaciones cuando las farmacias respondan.";
+      const mensaje_exito = "Tu receta fue enviada. Recibiras notificaciones cuando las farmacias respondan.";
       if (Platform.OS === 'web') {
         window.alert("¡Receta subida! " + mensaje_exito);
       } else {
@@ -222,14 +226,14 @@ export default function CargarRecetaScreen() {
       }
       
       // Limpiar estado
-      setImageAsset(null);
+      setUploadedImage(null);
       setSelectedAddress(null);
       setAddresses([]);
       
       navigateToRecetas(router);
 
     } catch (error) {
-      console.log("❌ Error subiendo la receta (API/Net):", error);
+      console.log("❌❌❌❌ Error subiendo la receta (API/Net):", error); // ✅ API/General Error
       const errorMessage = error instanceof Error ? error.message : "Error desconocido";
       
       if (Platform.OS === 'web') {
@@ -261,7 +265,7 @@ export default function CargarRecetaScreen() {
       </View>
       
       <View style={styles.centerContainer}>
-        {!imageAsset ? (
+        {!uploadedImage ? (
           // Vista para seleccionar imagen
           <>
             <View style={styles.uploadPlaceholder}>
@@ -279,20 +283,20 @@ export default function CargarRecetaScreen() {
             <TouchableOpacity onPress={onPickImage} style={[globalStyles.secondaryButton, styles.buttonFullWidth, { marginTop: 16 }]}>
               <View style={styles.buttonContent}>
                 <Ionicons name="image" size={20} color={colors.textSecondary} />
-                <Text style={globalStyles.secondaryButtonText}>Subir desde Galería</Text>
+                <Text style={globalStyles.secondaryButtonText}>Subir desde Galeria</Text>
               </View>
             </TouchableOpacity>
           </>
         ) : (
-          // Vista para confirmar imagen y dirección
+          // Vista para confirmar imagen y direccion
           <>
             <Image 
-              source={{ uri: imageAsset.uri }} 
+              source={{ uri: uploadedImage }} 
               style={styles.uploadedImage}
               resizeMode="contain"
             />
 
-            {/* Selector de Dirección */}
+            {/* Selector de Direccion */}
             {loadingAddresses ? (
               <View style={styles.addressSelector}>
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -301,12 +305,14 @@ export default function CargarRecetaScreen() {
             ) : selectedAddress ? (
               <TouchableOpacity 
                 style={styles.addressSelector}
-                onPress={() => setShowAddressModal(true)}
+                onPress={() => {
+                  setShowAddressModal(true);
+                }}
               >
                 <View style={styles.addressInfo}>
                   <Ionicons name="location" size={20} color={colors.primary} />
                   <View style={styles.addressTextContainer}>
-                    <Text style={styles.addressLabel}>Dirección de entrega:</Text>
+                    <Text style={styles.addressLabel}>Direccion de entrega:</Text>
                     <Text style={styles.addressText} numberOfLines={2}>
                       {selectedAddress.alias ? `${selectedAddress.alias} - ` : ''}
                       {selectedAddress.street}, {selectedAddress.city}
@@ -322,7 +328,7 @@ export default function CargarRecetaScreen() {
                 onPress={() => router.push('../(tabs)/perfil')}
               >
                 <Ionicons name="alert-circle" size={20} color={colors.error} />
-                <Text style={styles.errorText}>Configura una dirección en tu perfil</Text>
+                <Text style={styles.errorText}>Configura una direccion en tu perfil</Text>
               </TouchableOpacity>
             )}
             
@@ -355,7 +361,7 @@ export default function CargarRecetaScreen() {
         )}
       </View>
 
-      {/* Modal de Selección de Dirección */}
+      {/* Modal de Seleccion de Direccion */}
       <Modal
         visible={showAddressModal}
         transparent
@@ -365,7 +371,7 @@ export default function CargarRecetaScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Dirección</Text>
+              <Text style={styles.modalTitle}>Seleccionar Direccion</Text>
               <TouchableOpacity onPress={() => setShowAddressModal(false)}>
                 <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
@@ -417,7 +423,7 @@ export default function CargarRecetaScreen() {
               }}
             >
               <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-              <Text style={styles.addAddressText}>Agregar nueva dirección</Text>
+              <Text style={styles.addAddressText}>Agregar nueva direccion</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -426,6 +432,7 @@ export default function CargarRecetaScreen() {
   );
 }
 
+// (Estilos sin cambios)
 const styles = StyleSheet.create({
   headerBar: {
     flexDirection: 'row',

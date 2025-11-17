@@ -1,4 +1,3 @@
-// app/farmacia/editar-perfil.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -8,8 +7,8 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  TextInput,
   ActivityIndicator,
+  TextInput, 
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,314 +16,286 @@ import { auth, db } from "../../src/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { globalStyles, colors } from "../../assets/styles";
 
+
 interface FarmaciaData {
-  id: string;
-  email?: string;
-  nombreComercial?: string;
-  direccion?: string;
-  telefono?: string;
-  horario?: string;
+  email: string; 
+  nombreComercial: string;
+  telefono: string;
+  direccion: string;
+  horario: string;
 }
 
 export default function EditarPerfilFarmacia() {
   const router = useRouter();
+  const [data, setData] = useState<FarmaciaData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [farmaciaId, setFarmaciaId] = useState<string>("");
-  
-  // Campos editables
-  const [nombreComercial, setNombreComercial] = useState("");
-  const [direccion, setDireccion] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [horario, setHorario] = useState("");
-  
-  // Campo no editable
-  const [email, setEmail] = useState("");
-
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace("/farmacia");
-    }
-  };
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    loadFarmacia();
+    // Cargar los datos actuales de la farmacia
+    const user = auth.currentUser;
+    if (user) {
+      // Usamos user.email del Auth como fuente para el campo de solo lectura
+      loadFarmacia(user.uid, user.email || ""); 
+    } else {
+      router.back(); 
+    }
   }, []);
 
-  const loadFarmacia = async () => {
+  const loadFarmacia = async (uid: string, userEmail: string) => {
     try {
-      const user = auth.currentUser;
-      if (!user) {
-        router.replace("/auth/login");
-        return;
-      }
-
-      const farmaciaRef = doc(db, "farmacias", user.uid);
+      const farmaciaRef = doc(db, "farmacias", uid);
       const farmaciaSnap = await getDoc(farmaciaRef);
 
+      let farmaciaData: FarmaciaData;
+
       if (farmaciaSnap.exists()) {
-        const data = farmaciaSnap.data();
-        setFarmaciaId(farmaciaSnap.id);
-        setEmail(data.email || user.email || "");
-        setNombreComercial(data.nombreComercial || "");
-        setDireccion(data.direccion || "");
-        setTelefono(data.telefono || "");
-        setHorario(data.horario || "");
+        const firestoreData = farmaciaSnap.data();
+        farmaciaData = {
+          email: userEmail, // Email siempre del Auth (lectura)
+          nombreComercial: firestoreData.nombreComercial || "",
+          telefono: firestoreData.telefono || "",
+          direccion: firestoreData.direccion || "",
+          horario: firestoreData.horario || "",
+        };
       } else {
-        Alert.alert("Error", "No se encontró la farmacia");
-        handleBack();
+         farmaciaData = {
+            email: userEmail,
+            nombreComercial: "",
+            telefono: "",
+            direccion: "",
+            horario: "",
+        };
       }
+
+      setData(farmaciaData);
+
     } catch (error) {
-      console.error("Error cargando farmacia:", error);
-      Alert.alert("Error", "No se pudieron cargar los datos");
+      console.error("❌ Error cargando datos para editar:", error); // ✅ Error
+      Alert.alert("Error", "No se pudieron cargar los datos actuales.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGuardar = async () => {
-    // Validaciones
-    if (!nombreComercial.trim()) {
-      Alert.alert("Error", "El nombre comercial es requerido");
-      return;
+  const handleSave = async () => {
+    if (!data || !auth.currentUser) return;
+
+    if (!data.nombreComercial.trim() || !data.direccion.trim()) {
+        console.warn("Validacion: Campos requeridos vacios."); // ✅ Validación
+        Alert.alert("Campos requeridos", "El Nombre Comercial y la Dirección son obligatorios.");
+        return;
     }
 
-    if (!telefono.trim()) {
-      Alert.alert("Error", "El teléfono es requerido");
-      return;
-    }
-
-    if (!direccion.trim()) {
-      Alert.alert("Error", "La dirección es requerida");
-      return;
-    }
-
-    if (!horario.trim()) {
-      Alert.alert("Error", "El horario es requerido");
-      return;
-    }
-
+    setIsSaving(true);
     try {
-      setSubmitting(true);
+      const farmaciaRef = doc(db, "farmacias", auth.currentUser.uid);
+      
+      // Creamos un objeto con los datos a actualizar, EXCLUYENDO el email.
+      const dataToUpdate = {
+        nombreComercial: data.nombreComercial,
+        telefono: data.telefono,
+        direccion: data.direccion,
+        horario: data.horario,
+      };
 
-      const farmaciaRef = doc(db, "farmacias", farmaciaId);
-      await updateDoc(farmaciaRef, {
-        nombreComercial: nombreComercial.trim(),
-        direccion: direccion.trim(),
-        telefono: telefono.trim(),
-        horario: horario.trim(),
-      });
-
-      Alert.alert("Éxito", "Perfil actualizado correctamente", [
-        {
-          text: "OK",
-          onPress: handleBack,
-        },
-      ]);
+      await updateDoc(farmaciaRef, dataToUpdate); // ✅ Firebase Interaction
+      
+      Alert.alert("Éxito", "Perfil actualizado correctamente.");
+      router.back(); 
+      
     } catch (error) {
-      console.error("Error actualizando perfil:", error);
-      Alert.alert("Error", "No se pudo actualizar el perfil");
+      console.error("❌ Error al guardar datos:", error); // ✅ Error
+      Alert.alert("Error", "No se pudo guardar la información.");
     } finally {
-      setSubmitting(false);
+      setIsSaving(false);
     }
   };
+  
+  // La función de cambio solo acepta campos editables
+  const handleChange = (field: Exclude<keyof FarmaciaData, 'email'>, value: string) => {
+    setData(prev => (prev ? { ...prev, [field]: value } : null));
+  };
+
 
   if (loading) {
     return (
       <SafeAreaView style={globalStyles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={handleBack}>
-            <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-          </Pressable>
-          <Text style={styles.title}>Editar Perfil</Text>
-        </View>
-        <View style={styles.centerRow}>
+        <View style={stylesModal.centerRow}>
           <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={stylesModal.loadingText}>Cargando datos...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={globalStyles.container} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={handleBack}>
-          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+    <SafeAreaView style={globalStyles.container}>
+      <View style={stylesModal.header}>
+        <Text style={stylesModal.title}>Editar Perfil</Text>
+        <Pressable onPress={() => router.back()}>
+          <Ionicons name="close-circle-outline" size={30} color={colors.textSecondary} />
         </Pressable>
-        <Text style={styles.title}>Editar Perfil</Text>
       </View>
 
-      <ScrollView
-        style={globalStyles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Email (no editable) */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Email</Text>
-          <View style={[styles.inputDisabled]}>
-            <Ionicons name="mail-outline" size={20} color={colors.textTertiary} />
-            <Text style={styles.disabledText}>{email}</Text>
-          </View>
-          <Text style={styles.hint}>El email no se puede modificar</Text>
+      <ScrollView style={globalStyles.scrollView} contentContainerStyle={stylesModal.scrollContent}>
+        
+        {/* ------------------------------------- */}
+        {/* Email - SOLO LECTURA (NO EDITABLE)    */}
+        {/* ------------------------------------- */}
+        <View style={stylesModal.inputGroup}>
+            <Text style={stylesModal.labelReadOnly}>Email (no editable)</Text>
+            <View style={stylesModal.readOnlyInput}> 
+                <Text style={stylesModal.readOnlyText}>{data?.email}</Text>
+            </View>
+        </View>
+        
+        {/* Campo Nombre Comercial */}
+        <View style={stylesModal.inputGroup}>
+          <Text style={stylesModal.label}>Nombre Comercial</Text>
+          <TextInput
+            style={stylesModal.input}
+            value={data?.nombreComercial}
+            onChangeText={(text) => handleChange('nombreComercial', text)}
+            placeholder="Nombre de la farmacia"
+          />
         </View>
 
-        {/* Nombre Comercial */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Nombre Comercial *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="business-outline" size={20} color={colors.textTertiary} />
-            <TextInput
-              style={styles.input}
-              value={nombreComercial}
-              onChangeText={setNombreComercial}
-              placeholder="Ej: Farmacia Central"
-              placeholderTextColor={colors.textTertiary}
-              editable={!submitting}
-            />
-          </View>
+        {/* Campo Teléfono */}
+        <View style={stylesModal.inputGroup}>
+          <Text style={stylesModal.label}>Teléfono</Text>
+          <TextInput
+            style={stylesModal.input}
+            value={data?.telefono}
+            onChangeText={(text) => handleChange('telefono', text)}
+            placeholder="Ej: 1123456789"
+            keyboardType="phone-pad"
+          />
         </View>
-
-        {/* Teléfono */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Teléfono *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="call-outline" size={20} color={colors.textTertiary} />
-            <TextInput
-              style={styles.input}
-              value={telefono}
-              onChangeText={setTelefono}
-              placeholder="Ej: 011 1234-5678"
-              placeholderTextColor={colors.textTertiary}
-              keyboardType="phone-pad"
-              editable={!submitting}
-            />
-          </View>
+        
+        {/* Campo Dirección */}
+        <View style={stylesModal.inputGroup}>
+          <Text style={stylesModal.label}>Dirección</Text>
+          <TextInput
+            style={stylesModal.input}
+            value={data?.direccion}
+            onChangeText={(text) => handleChange('direccion', text)}
+            placeholder="Calle, número, localidad"
+          />
         </View>
-
-        {/* Dirección */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Dirección *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="location-outline" size={20} color={colors.textTertiary} />
-            <TextInput
-              style={styles.input}
-              value={direccion}
-              onChangeText={setDireccion}
-              placeholder="Ej: Av. Corrientes 1234, CABA"
-              placeholderTextColor={colors.textTertiary}
-              editable={!submitting}
-            />
-          </View>
+        
+        {/* Campo Horario */}
+        <View style={stylesModal.inputGroup}>
+          <Text style={stylesModal.label}>Horario de Atención</Text>
+          <TextInput
+            style={stylesModal.input}
+            value={data?.horario}
+            onChangeText={(text) => handleChange('horario', text)}
+            placeholder="Ej: Lunes a Viernes 8:00 - 18:00"
+          />
         </View>
-
-        {/* Horario */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Horario *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="time-outline" size={20} color={colors.textTertiary} />
-            <TextInput
-              style={styles.input}
-              value={horario}
-              onChangeText={setHorario}
-              placeholder="Ej: 8:00 a 20:00"
-              placeholderTextColor={colors.textTertiary}
-              editable={!submitting}
-            />
-          </View>
-          <Text style={styles.hint}>Formato: 8:00 a 12:00</Text>
-        </View>
-
-        {/* Botón Guardar */}
+        
+        <View style={{ height: 20 }} /> 
+        
+        {/* Botón de Guardar */}
         <Pressable
-          style={({ pressed }) => [
-            globalStyles.primaryButton,
-            pressed && globalStyles.buttonPressed,
-            submitting && globalStyles.buttonDisabled,
-            styles.guardarButton,
-          ]}
-          onPress={handleGuardar}
-          disabled={submitting}
-        >
-          <Text style={globalStyles.primaryButtonText}>
-            {submitting ? "Guardando..." : "Guardar Cambios"}
-          </Text>
+            style={({ pressed }) => [
+              stylesModal.saveButton,
+              pressed && { opacity: 0.8 },
+              isSaving && { backgroundColor: colors.textTertiary }
+            ]}
+            onPress={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={stylesModal.saveButtonText}>Guardar Cambios</Text>
+            )}
         </Pressable>
 
-        <View style={{ height: 24 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+
+const stylesModal = StyleSheet.create({
   header: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 16,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: colors.textPrimary,
+  },
+  scrollContent: {
+    padding: 20,
+    gap: 16,
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textSecondary,
+  },
+  labelReadOnly: { // Etiqueta para el campo no editable
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textTertiary,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: colors.textPrimary,
+    backgroundColor: colors.surface,
+  },
+  // Estilos para campo de SOLO LECTURA
+  readOnlyInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: colors.background, // Color de fondo para indicar que está deshabilitado
+  },
+  readOnlyText: {
+    fontSize: 16,
+    color: colors.textTertiary, // Color de texto para indicar que es solo lectura
+  },
+  saveButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+  },
+  saveButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
   centerRow: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 8, 
   },
-  fieldContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.textPrimary,
-    marginBottom: 8,
-  },
-  inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  inputDisabled: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  disabledText: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.textTertiary,
-  },
-  hint: {
-    fontSize: 12,
-    color: colors.textTertiary,
-    marginTop: 4,
-  },
-  guardarButton: {
-    marginTop: 8,
+  loadingText: {
+    color: colors.textSecondary,
   },
 });

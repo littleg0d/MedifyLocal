@@ -1,4 +1,3 @@
-// app/farmacia/pedidos.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -18,135 +17,129 @@ import {
   collection,
   query,
   where,
-  getDocs,
   doc,
-  getDoc,
   updateDoc,
+  onSnapshot, 
 } from "firebase/firestore";
 import { globalStyles, colors } from "../../assets/styles";
-
-interface Pedido {
-  id: string;
-  userObraSocial?: {
-    name: string;
-    number: string;
-  };
-  precio?: number;
-  descripcion?: string;
-  userAddress?: {
-    street: string;
-    city: string;
-    province: string;
-    postalCode: string;
-  };
-  estado?: string;
-  fechaCreacion?: any;
-  userId?: string;
-  userName?: string;
-  userEmail?: string;
-  userDNI?: string;
-  userPhone?: string;
-  imagenUrl?: string;
-}
-
-/**
- * Helper para formatear Obra Social
- */
-const formatObraSocial = (os?: { name: string; number?: string }) => {
-  if (!os || !os.name) {
-    return "Sin obra social";
-  }
-  if (os.number) {
-    return `${os.name} (${os.number})`;
-  }
-  return os.name;
-};
+import { Pedido, Address, ObraSocial } from "../../assets/types"; // ✅ Importar tipos de objetos
+import { formatAddress, formatObraSocial, formatCurrency } from "../../src/lib/formatHelpers";
 
 export default function FarmaciaPedidos() {
   const router = useRouter();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false); 
   const [farmaciaId, setFarmaciaId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFarmaciaAndPedidos();
+    const user = auth.currentUser;
+    if (!user) {
+      router.replace("/auth/login");
+      return;
+    }
+
+    const fId = user.uid;
+    setFarmaciaId(fId);
+
+    const unsubscribe = listenForPedidos(fId); 
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
-  const loadFarmaciaAndPedidos = async () => {
+  const listenForPedidos = (fId: string): () => void => {
     try {
-      const user = auth.currentUser;
-      if (!user) {
-        router.replace("/auth/login");
-        return;
+      if (!refreshing) {
+        setLoading(true);
       }
-
-      const farmaciaRef = doc(db, "farmacias", user.uid);
-      const farmaciaSnap = await getDoc(farmaciaRef);
-
-      let fId = user.uid;
-      if (farmaciaSnap.exists()) {
-        fId = farmaciaSnap.id;
-      }
-
-      setFarmaciaId(fId);
-      await loadPedidos(fId);
-    } catch (error) {
-      console.error("Error cargando farmacia:", error);
-    }
-  };
-
-  const loadPedidos = async (fId: string) => {
-    try {
-      setLoading(true);
 
       const pedidosRef = collection(db, "pedidos");
-
-      // ✅ CAMBIO: Query para filtrar SOLO pagados o entregados
       const q = query(
         pedidosRef,
         where("farmaciaId", "==", fId),
-        where("estado", "in", ["pagado", "entregado"]) // <-- Lógica actualizada
+        where("estado", "in", ["pagado", "entregado"])
       );
 
-      const snapshot = await getDocs(q);
-      const pedidosData: Pedido[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Pedido[];
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        
+        const pedidosData: Pedido[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            userId: data.userId || "",
+            recetaId: data.recetaId || "",
+            cotizacionId: data.cotizacionId || "",
+            farmaciaId: data.farmaciaId || "",
+            
+            // Datos del Usuario (Corrección aplicada aquí)
+            userName: data.userName || "",
+            userEmail: data.userEmail,
+            userDNI: data.userDNI,
+            userPhone: data.userPhone,
+            userAddress: (data.userAddress || {}) as Address, // ✅ Asegurar que es un objeto Address
+            userObraSocial: (data.userObraSocial || {}) as ObraSocial, // ✅ Asegurar que es un objeto ObraSocial
+            
+            // Datos de la Farmacia
+            nombreComercial: data.nombreComercial || "",
+            farmEmail: data.farmEmail,
+            farmPhone: data.farmPhone,
+            farmAddress: data.farmAddress || "",
+            horario: data.horario,
+            
+            // Datos del Pedido
+            precio: data.precio || 0,
+            descripcion: data.descripcion,
+            imagenUrl: data.imagenUrl,
+            estado: data.estado || "pendiente",
+            
+            // Fechas
+            fechaCreacion: data.fechaCreacion?.toDate() || new Date(),
+            fechaPago: data.fechaPago?.toDate() || null,
+            fechaCierre: data.fechaCierre?.toDate(),
+            
+            // MercadoPago
+            paymentId: data.paymentId,
+            paymentStatus: data.paymentStatus,
+          } as Pedido;
+        });
 
-      // Ordenar manualmente por fecha (más confiable)
-      pedidosData.sort((a, b) => {
-        if (!a.fechaCreacion || !b.fechaCreacion) return 0;
-        const aTime = a.fechaCreacion.seconds || 0;
-        const bTime = b.fechaCreacion.seconds || 0;
-        return bTime - aTime; // Más reciente primero
+        // Ordenar por fecha más reciente
+        pedidosData.sort((a, b) => {
+          return b.fechaCreacion.getTime() - a.fechaCreacion.getTime();
+        });
+
+        setPedidos(pedidosData);
+        setLoading(false);
+        setRefreshing(false);
+      }, (error) => {
+        console.error("❌ Error en onSnapshot (Firebase):", error); 
+        Alert.alert(
+          "Error de consulta en tiempo real",
+          "No se pudieron cargar los pedidos. Es posible que falte un índice en la base de datos (farmaciaId y estado)."
+        );
+        setLoading(false);
+        setRefreshing(false);
       });
-
-      setPedidos(pedidosData);
+      
+      return unsubscribe;
+      
     } catch (error) {
-      console.error("Error cargando pedidos:", error);
-      Alert.alert(
-        "Error de consulta",
-        "No se pudieron cargar los pedidos. Es posible que falte un índice en la base de datos (farmaciaId y estado). Revisa la consola para más detalles."
-      );
-    } finally {
+      console.error("❌ Error al configurar el listener de pedidos:", error);
       setLoading(false);
       setRefreshing(false);
+      return () => {};
     }
   };
 
-  const onRefresh = async () => {
-    if (farmaciaId) {
-      setRefreshing(true);
-      await loadPedidos(farmaciaId);
-    }
+  const onRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000); 
   };
 
-  /**
-   * Función para marcar como 'entregado'
-   */
   const handleMarcarEntregado = async (pedidoId: string) => {
+    
     Alert.alert(
       "Confirmar Entrega",
       "¿Estás seguro de que este pedido ya fue entregado al cliente?",
@@ -158,58 +151,41 @@ export default function FarmaciaPedidos() {
           onPress: async () => {
             try {
               const pedidoRef = doc(db, "pedidos", pedidoId);
-              await updateDoc(pedidoRef, {
+              await updateDoc(pedidoRef, { 
                 estado: "entregado",
+                fechaCierre: new Date(),
               });
-              await onRefresh(); // Recargar la lista
             } catch (error) {
-              console.error("Error al actualizar el pedido:", error);
-              Alert.alert(
-                "Error",
-                "No se pudo actualizar el estado del pedido."
-              );
+              console.error("❌ Error al actualizar el pedido (Firebase):", error); 
+              Alert.alert("Error", "No se pudo actualizar el estado del pedido.");
             }
           },
         },
       ]
     );
   };
+  
+  
 
-  const formatPrice = (price?: number) => {
-    if (!price) return "Sin precio";
-    return `$${price.toLocaleString("es-AR")}`;
+  const formatDate = (date: Date | null) => {
+    if (!date) return "";
+    return date.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
-  const formatDate = (timestamp?: any) => {
-    if (!timestamp) return "";
-    try {
-      const seconds = timestamp.seconds || 0;
-      const date = new Date(seconds * 1000);
-      return date.toLocaleDateString("es-AR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return "";
-    }
-  };
-
-  const getEstadoBadge = (estado?: string) => {
-    const estados: Record<
-      string,
-      { label: string; color: string; bg: string }
-    > = {
-      // ... (otros estados para referencia)
+  const getEstadoBadge = (estado: string) => {
+    const estados: Record<string, { label: string; color: string; bg: string }> = {
       pagado: { label: "Pagado", color: "#10B981", bg: "#D1FAE5" },
-      en_camino: { label: "En camino", color: "#3B82F6", bg: "#DBEAFE" }, // Se mantiene por si acaso
       entregado: { label: "Entregado", color: "#6B7280", bg: "#F3F4F6" },
     };
 
-    const estadoInfo = estados[estado || "pendiente"] || {
-      label: estado || "Pendiente",
+    const estadoInfo = estados[estado] || {
+      label: estado,
       color: "#F59E0B",
       bg: "#FEF3C7",
     };
@@ -257,11 +233,7 @@ export default function FarmaciaPedidos() {
       >
         {pedidos.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons
-              name="cart-outline"
-              size={64}
-              color={colors.textTertiary}
-            />
+            <Ionicons name="cart-outline" size={64} color={colors.textTertiary} />
             <Text style={styles.emptyText}>No hay pedidos</Text>
             <Text style={styles.emptySubtext}>
               Los pedidos pagados o entregados aparecerán aquí
@@ -278,123 +250,69 @@ export default function FarmaciaPedidos() {
                   {getEstadoBadge(pedido.estado)}
                 </View>
 
-                {/* Usuario */}
                 {pedido.userName && (
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="person-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
-                    <Text style={styles.infoText}>
-                      Cliente: {pedido.userName}
-                    </Text>
+                    <Ionicons name="person-outline" size={18} color={colors.textTertiary} />
+                    <Text style={styles.infoText}>Cliente: {pedido.userName}</Text>
                   </View>
                 )}
 
-                {/* Email */}
                 {pedido.userEmail && (
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="mail-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
+                    <Ionicons name="mail-outline" size={18} color={colors.textTertiary} />
                     <Text style={styles.infoText}>{pedido.userEmail}</Text>
                   </View>
                 )}
 
-                {/* Teléfono (Condicional) */}
                 {pedido.userPhone && (
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="call-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
+                    <Ionicons name="call-outline" size={18} color={colors.textTertiary} />
                     <Text style={styles.infoText}>Tel: {pedido.userPhone}</Text>
                   </View>
                 )}
 
-                {/* DNI (Condicional) */}
                 {pedido.userDNI && (
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="card-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
+                    <Ionicons name="card-outline" size={18} color={colors.textTertiary} />
                     <Text style={styles.infoText}>DNI: {pedido.userDNI}</Text>
                   </View>
                 )}
 
-                {/* Obra Social (Mejorado) */}
                 <View style={styles.infoRow}>
-                  <Ionicons
-                    name="medical-outline"
-                    size={18}
-                    color={colors.textTertiary}
-                  />
+                  <Ionicons name="medical-outline" size={18} color={colors.textTertiary} />
                   <Text style={styles.infoText}>
                     {formatObraSocial(pedido.userObraSocial)}
                   </Text>
                 </View>
 
-                {/* Precio */}
                 <View style={styles.infoRow}>
-                  <Ionicons
-                    name="cash-outline"
-                    size={18}
-                    color={colors.textTertiary}
-                  />
+                  <Ionicons name="cash-outline" size={18} color={colors.textTertiary} />
                   <Text style={styles.infoText}>
-                    Precio: {formatPrice(pedido.precio)}
+                    Precio: {formatCurrency(pedido.precio)}
                   </Text>
                 </View>
 
-                {/* Descripción */}
                 {pedido.descripcion && (
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="document-text-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
+                    <Ionicons name="document-text-outline" size={18} color={colors.textTertiary} />
                     <Text style={styles.infoText}>{pedido.descripcion}</Text>
                   </View>
                 )}
 
-                {/* Dirección */}
                 {pedido.userAddress && (
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="location-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
-                    <Text style={styles.infoText}>
-                      {pedido.userAddress.street}
-                      {pedido.userAddress.city &&
-                        `, ${pedido.userAddress.city}`}
-                    </Text>
+                    <Ionicons name="location-outline" size={18} color={colors.textTertiary} />
+                    <Text style={styles.infoText}>{formatAddress(pedido.userAddress)}</Text>
                   </View>
                 )}
 
-                {/* Fecha */}
-                {pedido.fechaCreacion && (
-                  <View style={styles.infoRow}>
-                    <Ionicons
-                      name="time-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
-                    <Text style={styles.infoTextSmall}>
-                      {formatDate(pedido.fechaCreacion)}
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.infoRow}>
+                  <Ionicons name="time-outline" size={18} color={colors.textTertiary} />
+                  <Text style={styles.infoTextSmall}>
+                    {formatDate(pedido.fechaCreacion)}
+                  </Text>
+                </View>
 
-                {/* ✅ CAMBIO: Botón condicional */}
                 {pedido.estado === "pagado" && (
                   <Pressable
                     style={({ pressed }) => [
@@ -403,11 +321,7 @@ export default function FarmaciaPedidos() {
                     ]}
                     onPress={() => handleMarcarEntregado(pedido.id)}
                   >
-                    <Ionicons
-                      name="checkmark-done-outline"
-                      size={18}
-                      color="white"
-                    />
+                    <Ionicons name="checkmark-done-outline" size={18} color="white" />
                     <Text style={styles.entregadoButtonText}>
                       Marcar como Entregado
                     </Text>
@@ -462,6 +376,8 @@ const styles = StyleSheet.create({
   },
   pedidosList: {
     gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   pedidoCard: {
     backgroundColor: colors.surface,
@@ -505,7 +421,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textTertiary,
   },
-  // Estilo del botón de entregado
   entregadoButton: {
     backgroundColor: colors.primary,
     borderRadius: 8,

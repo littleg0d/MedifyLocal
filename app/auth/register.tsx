@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc, collection, addDoc } from "firebase/firestore";
 import React, { useState } from "react";
 import {
   Alert,
@@ -24,7 +24,7 @@ export default function Register() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  // Datos básicos
+  // Datos basicos
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -32,20 +32,20 @@ export default function Register() {
   const [dni, setDni] = useState("");
   const [birthDate, setBirthDate] = useState("");
 
-  // Dirección
+  // Direccion
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
   const [province, setProvince] = useState("Seleccioná tu provincia");
   const [postalCode, setPostalCode] = useState("");
+  const [addressAlias, setAddressAlias] = useState("Casa");
 
   // Obra social
   const [obraSocial, setObraSocial] = useState("Seleccioná tu obra social");
   const [numeroObraSocial, setNumeroObraSocial] = useState("");
 
-  // ✅ Verificar si debe habilitar el campo de número
   const debeIngresarNumero = obraSocial !== "Seleccioná tu obra social" && obraSocial !== "Sin obra social";
 
-  // Función para formatear fecha automáticamente
+  // Helper: Formateo automatico de fecha
   const handleDateChange = (text: string) => {
     let cleaned = text.replace(/[^\d]/g, '');
     
@@ -59,7 +59,7 @@ export default function Register() {
     setBirthDate(cleaned.slice(0, 10));
   };
 
-  // Validar fecha real
+  // Helper: Validacion de fecha real
   const validateDate = (dateString: string) => {
     const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
     if (!dateRegex.test(dateString)) {
@@ -80,7 +80,7 @@ export default function Register() {
     );
   };
 
-  // Calcular edad
+  // Helper: Calcular edad
   const calculateAge = (dateString: string) => {
     const [day, month, year] = dateString.split('/').map(Number);
     const birthDate = new Date(year, month - 1, day);
@@ -95,17 +95,18 @@ export default function Register() {
     return age;
   };
 
-  // ✅ Handler para cambiar obra social
+  // Handler para obra social
   const handleObraSocialChange = (value: string) => {
     setObraSocial(value);
-    // Si selecciona "Sin obra social", limpiar el número
     if (value === "Sin obra social") {
       setNumeroObraSocial("");
     }
   };
 
+  // Logica de registro
   const onRegister = async () => {
-    // Validaciones obligatorias
+    
+    // --- VALIDACIONES ---
     if (!email.trim()) {
       Alert.alert("Error", "Ingresá tu email");
       return;
@@ -177,12 +178,12 @@ export default function Register() {
       return;
     }
 
-    // ✅ Validación de número SOLO si seleccionó una obra social (no "Sin obra social")
     if (debeIngresarNumero && !numeroObraSocial.trim()) {
       Alert.alert("Error", "Ingresá tu número de afiliado");
       return;
     }
 
+    // --- PROCESO DE CREACION ---
     try {
       setLoading(true);
 
@@ -196,7 +197,6 @@ export default function Register() {
         displayName: `${firstName.trim()} ${lastName.trim()}`,
       });
 
-      // ✅ Guardar obra social solo si seleccionó una
       const userData: any = {
         email: email.trim(),
         displayName: `${firstName.trim()} ${lastName.trim()}`,
@@ -205,16 +205,9 @@ export default function Register() {
         lastName: lastName.trim(),
         dni: dni.trim(),
         birthDate: birthDate.trim(),
-        address: {
-          street: street.trim(),
-          city: city.trim(),
-          province: province,
-          postalCode: postalCode.trim(),
-        },
         createdAt: serverTimestamp(),
       };
 
-      // ✅ Solo agregar obra social si NO seleccionó "Sin obra social"
       if (obraSocial !== "Sin obra social") {
         userData.obraSocial = {
           name: obraSocial,
@@ -224,16 +217,33 @@ export default function Register() {
 
       await setDoc(doc(db, "users", userCredential.user.uid), userData);
 
+      const addressesRef = collection(db, "users", userCredential.user.uid, "addresses");
+      await addDoc(addressesRef, {
+        street: street.trim(),
+        city: city.trim(),
+        province: province,
+        postalCode: postalCode.trim(),
+        alias: addressAlias.trim() || "Casa",
+        isDefault: true,
+        fechaCreacion: serverTimestamp(),
+      });
+
       Alert.alert("¡Listo!", "Tu cuenta fue creada", [
         { text: "Continuar", onPress: () => router.replace("/(tabs)") }
       ]);
 
     } catch (e: any) {
       let msg = "No pudimos crear tu cuenta";
-      if (e?.code?.includes("email-already-in-use")) msg = "Este email ya está registrado";
-      if (e?.code?.includes("weak-password")) msg = "Contraseña muy débil";
+      
+      if (e?.code === "auth/email-already-in-use") {
+        msg = "Este email ya está registrado";
+      }
+      if (e?.code === "auth/weak-password") {
+        msg = "Contraseña muy débil";
+      }
+      
       Alert.alert("Error", msg);
-      console.error(e);
+      
     } finally {
       setLoading(false);
     }
@@ -270,6 +280,7 @@ export default function Register() {
               autoCapitalize="none"
               keyboardType="email-address"
               placeholderTextColor={colors.textTertiary}
+              editable={!loading}
             />
 
             <TextInput
@@ -279,6 +290,7 @@ export default function Register() {
               style={globalStyles.input}
               secureTextEntry
               placeholderTextColor={colors.textTertiary}
+              editable={!loading}
             />
 
             {/* Datos personales */}
@@ -291,6 +303,7 @@ export default function Register() {
                 onChangeText={setFirstName}
                 style={[globalStyles.input, globalStyles.halfWidth]}
                 placeholderTextColor={colors.textTertiary}
+                editable={!loading}
               />
               <TextInput
                 placeholder="Apellido *"
@@ -298,31 +311,44 @@ export default function Register() {
                 onChangeText={setLastName}
                 style={[globalStyles.input, globalStyles.halfWidth]}
                 placeholderTextColor={colors.textTertiary}
+                editable={!loading}
               />
             </View>
 
-            <View style={globalStyles.row}>
-              <TextInput
-                placeholder="DNI *"
-                value={dni}
-                onChangeText={setDni}
-                style={[globalStyles.input, globalStyles.halfWidth]}
-                keyboardType="numeric"
-                maxLength={8}
-                placeholderTextColor={colors.textTertiary}
-              />
-              <TextInput
-                placeholder="Fecha nac. DD/MM/AAAA *"
-                value={birthDate}
-                onChangeText={handleDateChange}
-                style={[globalStyles.input, globalStyles.halfWidth]}
-                keyboardType="numeric"
-                placeholderTextColor={colors.textTertiary}
-              />
-            </View>
+            {/* DNI en una línea completa */}
+            <TextInput
+              placeholder="DNI *"
+              value={dni}
+              onChangeText={setDni}
+              style={globalStyles.input}
+              keyboardType="numeric"
+              maxLength={8}
+              placeholderTextColor={colors.textTertiary}
+              editable={!loading}
+            />
 
-            {/* Dirección */}
+            {/* Fecha de nacimiento en línea separada */}
+            <TextInput
+              placeholder="Fecha de nacimiento (DD/MM/AAAA) *"
+              value={birthDate}
+              onChangeText={handleDateChange}
+              style={globalStyles.input}
+              keyboardType="numeric"
+              placeholderTextColor={colors.textTertiary}
+              editable={!loading}
+            />
+
+            {/* Direccion */}
             <Text style={styles.sectionTitle}>Dirección *</Text>
+
+            <TextInput
+              placeholder="Alias (ej: Casa, Trabajo) *"
+              value={addressAlias}
+              onChangeText={setAddressAlias}
+              style={globalStyles.input}
+              placeholderTextColor={colors.textTertiary}
+              editable={!loading}
+            />
 
             <TextInput
               placeholder="Calle y número *"
@@ -330,6 +356,7 @@ export default function Register() {
               onChangeText={setStreet}
               style={globalStyles.input}
               placeholderTextColor={colors.textTertiary}
+              editable={!loading}
             />
 
             <View style={globalStyles.row}>
@@ -339,6 +366,7 @@ export default function Register() {
                 onChangeText={setCity}
                 style={[globalStyles.input, globalStyles.halfWidth]}
                 placeholderTextColor={colors.textTertiary}
+                editable={!loading}
               />
               <TextInput
                 placeholder="Código Postal *"
@@ -347,14 +375,16 @@ export default function Register() {
                 style={[globalStyles.input, globalStyles.halfWidth]}
                 keyboardType="numeric"
                 placeholderTextColor={colors.textTertiary}
+                editable={!loading}
               />
             </View>
 
-            <View style={styles.pickerContainer}>
+            <View style={[styles.pickerContainer, loading && styles.pickerDisabled]}>
               <Picker
                 selectedValue={province}
                 onValueChange={setProvince}
                 style={styles.picker}
+                enabled={!loading}
               >
                 {PROVINCIAS.map((p) => (
                   <Picker.Item 
@@ -367,14 +397,15 @@ export default function Register() {
               </Picker>
             </View>
 
-            {/* Obra social - OBLIGATORIO */}
+            {/* Obra social */}
             <Text style={styles.sectionTitle}>Obra Social *</Text>
 
-            <View style={styles.pickerContainer}>
+            <View style={[styles.pickerContainerTall, loading && styles.pickerDisabled]}>
               <Picker
                 selectedValue={obraSocial}
                 onValueChange={handleObraSocialChange}
-                style={styles.picker}
+                style={styles.pickerTall}
+                enabled={!loading}
               >
                 {OBRAS_SOCIALES.map((o) => (
                   <Picker.Item 
@@ -387,25 +418,24 @@ export default function Register() {
               </Picker>
             </View>
 
-            {/* ✅ Campo de número - DESHABILITADO si no tiene obra social o si eligió "Sin obra social" */}
             <TextInput
               placeholder={debeIngresarNumero ? "Número de afiliado *" : "No requerido"}
               value={numeroObraSocial}
               onChangeText={setNumeroObraSocial}
               style={[
                 globalStyles.input,
-                !debeIngresarNumero && styles.inputDisabledStyle
+                (!debeIngresarNumero || loading) && styles.inputDisabledStyle
               ]}
               keyboardType="numeric"
               placeholderTextColor={colors.textTertiary}
-              editable={debeIngresarNumero}
+              editable={debeIngresarNumero && !loading}
             />
 
-            {/* Botón registrar */}
+            {/* Boton registrar */}
             <Pressable
               style={({ pressed }) => [
                 globalStyles.primaryButton,
-                pressed && globalStyles.buttonPressed,
+                pressed && !loading && globalStyles.buttonPressed,
                 loading && globalStyles.buttonDisabled,
                 { marginTop: 24 }
               ]}
@@ -421,8 +451,10 @@ export default function Register() {
             <View style={styles.loginContainer}>
               <Text style={styles.loginText}>¿Ya tenés cuenta? </Text>
               <Link href="/auth/login" asChild>
-                <Pressable>
-                  <Text style={styles.link}>Iniciar sesión</Text>
+                <Pressable disabled={loading}>
+                  <Text style={[styles.link, loading && { opacity: 0.5 }]}>
+                    Iniciar sesión
+                  </Text>
                 </Pressable>
               </Link>
             </View>
@@ -470,15 +502,34 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 4,
   },
+  // Picker normal (provincia)
   pickerContainer: {
     backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    overflow: "hidden",
+    overflow: Platform.OS === 'android' ? 'hidden' : 'visible',
+    height: 56,
+    justifyContent: 'center',
   },
   picker: {
-    height: 50,
+    height: 56,
+  },
+  // Picker más alto (obra social)
+  pickerContainerTall: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: Platform.OS === 'android' ? 'hidden' : 'visible',
+    height: 56,
+    justifyContent: 'center',
+  },
+  pickerTall: {
+    height: 56,
+  },
+  pickerDisabled: {
+    opacity: 0.6,
   },
   inputDisabledStyle: {
     backgroundColor: colors.gray100,

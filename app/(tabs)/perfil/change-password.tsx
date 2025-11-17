@@ -5,7 +5,7 @@ import {
   reauthenticateWithCredential, 
   updatePassword 
 } from "firebase/auth";
-import { auth } from "../src/lib/firebase";
+import { auth } from "../../../src/lib/firebase";
 import React, { useState } from "react";
 import { 
   Alert, 
@@ -19,8 +19,8 @@ import {
   View 
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { globalStyles, colors } from "../assets/styles";
-import BackButton from "../src/components/common/backbutton";
+import { globalStyles, colors } from "../../../assets/styles";
+import BackButton from "../../../src/components/common/backbutton";
 
 export default function ChangePassword() {
   const router = useRouter();
@@ -29,6 +29,7 @@ export default function ChangePassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
 
   const onChangePassword = async () => {
     setError("");
@@ -53,6 +54,7 @@ export default function ChangePassword() {
       setError("La nueva contraseña debe ser diferente a la actual");
       return;
     }
+    
 
     try {
       setLoading(true);
@@ -60,6 +62,7 @@ export default function ChangePassword() {
       
       if (!user || !user.email) {
         Alert.alert("Error", "No hay usuario autenticado");
+        setLoading(false); // Detener Carga
         return;
       }
 
@@ -74,10 +77,10 @@ export default function ChangePassword() {
       // 2. Actualizar la contraseña
       await updatePassword(user, newPassword);
 
-      // 3. Éxito
+      // 3. Exito
       if (Platform.OS === "web") {
         alert("¡Tu contraseña fue actualizada correctamente!");
-        router.back();
+        router.push("/perfil");
       } else {
         Alert.alert(
           "¡Listo!",
@@ -85,16 +88,17 @@ export default function ChangePassword() {
           [
             {
               text: "Entendido",
-              onPress: () => router.back()
+              onPress: () => router.push("/perfil")
             }
           ]
         );
       }
     } catch (e: any) {
-      const code = String(e?.code || "");
+      const code = String(e?.code || "UNKNOWN_ERROR");
       
       let errorMessage = "No pudimos cambiar tu contraseña. Intentá de nuevo.";
       
+      // Mapeo de errores comunes
       if (code.includes("auth/wrong-password") || code.includes("auth/invalid-credential")) {
         errorMessage = "La contraseña actual es incorrecta";
       } else if (code.includes("auth/too-many-requests")) {
@@ -108,7 +112,7 @@ export default function ChangePassword() {
       setError(errorMessage);
       
       if (__DEV__) {
-        console.error("Change password error:", code, e.message);
+        console.log("❌❌❌❌ Change password error (raw):", code, e.message);
       }
     } finally {
       setLoading(false);
@@ -126,7 +130,7 @@ export default function ChangePassword() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <BackButton />
+          <BackButton onPress={() => router.replace("/perfil")}  />
 
           <View style={styles.content}>
             <Text style={styles.title}>Cambiar Contraseña</Text>
@@ -137,10 +141,12 @@ export default function ChangePassword() {
 
             {/* Mensaje de error */}
             {error ? (
-              <View style={globalStyles.errorContainer}>
-                <Ionicons name="alert-circle" size={20} color="#DC2626" />
-                <Text style={globalStyles.errorText}>{error}</Text>
-              </View>
+              <>
+                <View style={globalStyles.errorContainer}>
+                  <Ionicons name="alert-circle" size={20} color="#DC2626" />
+                  <Text style={globalStyles.errorText}>{error}</Text>
+                </View>
+              </>
             ) : null}
 
             {/* Formulario */}

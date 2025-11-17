@@ -9,7 +9,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary, // Usar tu color
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
           backgroundColor: 'white',
@@ -81,16 +81,28 @@ export default function TabLayout() {
         }}
       />
 
+      {/* Pantallas ocultas del tab bar */}
       <Tabs.Screen
         name="solicitudes"
         options={{
-          href: null, // Oculto del tab bar
+          href: null,
           title: 'Solicitudes',
         }}
       />
-
-    
-
+        <Tabs.Screen
+        name="perfil/editar-perfil"
+        options={{
+          href: null,
+          title: 'Editar Perfil',
+        }}
+      />
+        <Tabs.Screen
+        name="perfil/change-password"
+        options={{
+          href: null,
+          title: 'change-password',
+        }}
+      />
     </Tabs>
   );
 }

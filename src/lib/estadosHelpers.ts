@@ -16,6 +16,13 @@ import {
  */
 export function getEstadoPedidoConfig(estado: EstadoPedido): EstadoConfig {
   const configs: Record<EstadoPedido, EstadoConfig> = {
+    entregado: {
+      icon: "checkmark-done-circle",
+      color: colors.successDark,
+      bg: colors.successLight,
+      label: "Entregado",
+      descripcion: "Tu pedido ha sido entregado exitosamente",
+    },
     pagado: {
       icon: "checkmark-circle",
       color: colors.successDark,
@@ -191,7 +198,7 @@ export function esPedidoBloqueante(estado: EstadoPedido): boolean {
  * Verifica si un pedido está completado exitosamente
  */
 export function esPedidoCompletado(estado: EstadoPedido): boolean {
-  return estado === "pagado";
+  return estado === "pagado" || estado === "entregado";
 }
 
 /**

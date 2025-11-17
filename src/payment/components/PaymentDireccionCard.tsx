@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { globalStyles, colors } from "../../../assets/styles";
 import { Address } from "../../../assets/types";
+import { formatAddress } from "../../lib/formatHelpers";
 
 interface PaymentDireccionCardProps {
   direccion: Address | null;
@@ -20,21 +21,25 @@ export function PaymentDireccionCard({
         <View style={styles.direccionInfo}>
           <Ionicons name="location" size={24} color={colors.primary} />
           <View style={styles.direccionTexto}>
-            <Text style={styles.direccionCalle}>{direccion.street}</Text>
-            <Text style={styles.infoSecundaria}>
-              {direccion.city}, {direccion.province}
+            <Text style={styles.direccionCalle}>
+              {formatAddress(direccion)}
             </Text>
-            <Text style={styles.infoSecundaria}>CP: {direccion.postalCode}</Text>
+            <Text style={styles.infoAclaracion}>
+              Esta es la dirección que tenías configurada al subir la receta
+            </Text>
           </View>
         </View>
       ) : (
         <View style={styles.sinDireccion}>
           <Ionicons name="alert-circle" size={24} color={colors.warningDark} />
           <Text style={styles.sinDireccionTexto}>
-            No tienes una dirección configurada
+            Esta receta no tiene dirección de entrega configurada
+          </Text>
+          <Text style={styles.infoSecundaria}>
+            Configura tu dirección en el perfil y vuelve a cargar la receta
           </Text>
           <Pressable style={styles.configurarButton} onPress={onConfigureAddress}>
-            <Text style={styles.configurarButtonText}>Configurar ahora</Text>
+            <Text style={styles.configurarButtonText}>Ir a Perfil</Text>
           </Pressable>
         </View>
       )}
@@ -49,16 +54,24 @@ const styles = StyleSheet.create({
   },
   direccionTexto: {
     flex: 1,
-    gap: 4,
+    gap: 8,
   },
   direccionCalle: {
     fontSize: 16,
     fontWeight: "600",
     color: colors.textPrimary,
+    lineHeight: 22,
+  },
+  infoAclaracion: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontStyle: "italic",
   },
   infoSecundaria: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: 4,
   },
   sinDireccion: {
     alignItems: "center",
@@ -67,10 +80,12 @@ const styles = StyleSheet.create({
   },
   sinDireccionTexto: {
     fontSize: 14,
-    color: colors.textSecondary,
+    fontWeight: "600",
+    color: colors.warningDark,
     textAlign: "center",
   },
   configurarButton: {
+    marginTop: 8,
     paddingHorizontal: 20,
     paddingVertical: 10,
     backgroundColor: colors.primary,

@@ -10,6 +10,8 @@ import { PaymentMedicamentoCard } from "./PaymentMedicamentoCard";
 import { PaymentDireccionCard } from "./PaymentDireccionCard";
 import { PaymentSeguridadCard } from "./PaymentSeguridadCard";
 import { PaymentActionButton } from "./PaymentActionButton";
+import { PaymentStatusModal } from "./PaymentStatusModal";
+
 export function PaymentView(props: PaymentViewProps) {
   const {
     isLoading,
@@ -26,6 +28,9 @@ export function PaymentView(props: PaymentViewProps) {
     onGoBack,
     onGoToProfile,
     onGoToPedidos,
+    showModal,
+    modalSuccess,
+    handleCloseModal,
   } = props;
 
   // ============ PANTALLA DE CARGA ============
@@ -89,7 +94,7 @@ export function PaymentView(props: PaymentViewProps) {
         )}
 
         {/* Card de Medicamento */}
-        <PaymentMedicamentoCard cotizacion={cotizacion} />
+        <PaymentMedicamentoCard cotizacion={cotizacion} receta={receta} />
 
         {/* Card de Dirección */}
         <PaymentDireccionCard
@@ -110,6 +115,13 @@ export function PaymentView(props: PaymentViewProps) {
         procesandoPago={procesandoPago}
         onPagar={handlePagar}
         onGoToPedidos={onGoToPedidos}
+      />
+
+      {/* 🆕 Modal de Estado de Pago */}
+      <PaymentStatusModal
+        visible={showModal}
+        success={modalSuccess}
+        onClose={handleCloseModal}
       />
     </SafeAreaView>
   );

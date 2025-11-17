@@ -10,17 +10,17 @@ export default function AdminDashboard() {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await signOut(auth); // ✅ Firebase Interaction
       router.replace("/auth/login");
     } catch (error) {
-      console.error("Error al cerrar sesión:", error);
+      console.log(" ❌❌❌❌ [AdminDashboard] Error al cerrar sesion:", error); // ✅ Error
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Panel de Administración</Text>
+        <Text style={styles.title}>Panel de Administracion</Text>
         <Text style={styles.subtitle}>Bienvenido, Admin 👑</Text>
 
         <Pressable
@@ -37,11 +37,14 @@ export default function AdminDashboard() {
           <Text style={styles.buttonText}>🏥 Ver Farmacias</Text>
         </Pressable>
 
+        {/* Separador visual  */}
+        <View style={styles.separator} />
+
         <Pressable
           style={[styles.button, styles.logout]}
           onPress={handleLogout} 
         >
-          <Text style={styles.buttonText}>🚪 Cerrar Sesión</Text>
+          <Text style={styles.buttonText}>🚪 Cerrar Sesion</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -58,7 +61,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   title: { fontSize: 26, fontWeight: "700", color: colors.textPrimary },
-  subtitle: { fontSize: 16, color: colors.textSecondary },
+  subtitle: { fontSize: 16, color: colors.textSecondary, marginBottom: 20 },
   button: {
     backgroundColor: colors.primary,
     paddingVertical: 14,
@@ -67,6 +70,15 @@ const styles = StyleSheet.create({
     width: "80%",
     alignItems: "center",
   },
-  logout: { backgroundColor: colors.error },
+  logout: { 
+    backgroundColor: colors.error,
+    marginTop: 20, // Espacio extra para el logout
+  },
   buttonText: { color: "white", fontSize: 16, fontWeight: "600" },
+  separator: {
+    height: 1,
+    width: '80%',
+    backgroundColor: '#E5E7EB', 
+    marginTop: 20,
+  }
 });

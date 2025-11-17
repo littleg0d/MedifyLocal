@@ -1,4 +1,3 @@
-// app/farmacia/index.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -10,19 +9,16 @@ import {
   Pressable,
   Alert,
   Platform,
+  ActivityIndicator, 
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../src/lib/firebase";
 import {
   doc,
   getDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-} from "firebase/firestore";
+} from "firebase/firestore"; 
 import { globalStyles, colors } from "../../assets/styles";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { signOut } from "firebase/auth"; 
 
 interface Farmacia {
   id: string;
@@ -34,60 +30,46 @@ interface Farmacia {
   usuario?: string;
 }
 
+// Dashboard principal de la farmacia
 export default function FarmaciaHome() {
   const router = useRouter();
   const [farmacia, setFarmacia] = useState<Farmacia | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Carga de datos
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.replace("/auth/login");
-        return;
-      }
-
-      await loadFarmacia(user.uid);
-    });
-
-    return () => unsub();
+    // El _layout ya verifico al usuario. Solo cargamos sus datos.
+    const user = auth.currentUser;
+    if (user) {
+      loadFarmacia(user.uid); // ✅ Firebase Interaction
+    } else {
+      // Si por alguna razon no hay usuario, redirigir (fallback)
+      router.replace("/auth/login");
+    }
   }, []);
 
+  // Funcion para traer los datos del doc de la farmacia
   const loadFarmacia = async (uid: string) => {
     try {
       setLoading(true);
 
-      let data: any | null = null;
-      let id = uid;
+      const farmaciaRef = doc(db, "farmacias", uid);
+      const farmaciaSnap = await getDoc(farmaciaRef); // ✅ Firebase Interaction
 
-      const byIdRef = doc(db, "farmacias", uid);
-      const byIdSnap = await getDoc(byIdRef);
-
-      if (byIdSnap.exists()) {
-        data = byIdSnap.data();
-        id = byIdSnap.id;
-      } else {
-        const farmaciasRef = collection(db, "farmacias");
-        const q = query(farmaciasRef, where("authUid", "==", uid));
-        const snap = await getDocs(q);
-
-        if (!snap.empty) {
-          const d = snap.docs[0];
-          data = d.data();
-          id = d.id;
-        }
-      }
-
-      if (!data) {
+      if (!farmaciaSnap.exists()) {
         Alert.alert(
-          "Sin datos",
+          "Error de cuenta",
           "No encontramos una farmacia asociada a esta cuenta."
         );
         setFarmacia(null);
+        await signOut(auth); // ✅ Firebase Interaction
         return;
       }
 
+      const data = farmaciaSnap.data();
+
       setFarmacia({
-        id,
+        id: farmaciaSnap.id,
         nombreComercial: data.nombreComercial,
         email: data.email,
         telefono: data.telefono,
@@ -96,30 +78,32 @@ export default function FarmaciaHome() {
         usuario: data.usuario,
       });
     } catch (error) {
-      console.error("Error cargando farmacia:", error);
+      console.log("❌❌❌❌ Error cargando farmacia:", error); // ✅ General Error
       Alert.alert("Error", "No pudimos cargar los datos de la farmacia.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Logica de logout
   const handleLogout = async () => {
+    
     const confirmLogout = async () => {
       try {
-        await signOut(auth);
-        // El _layout.tsx detectará el cambio y redirigirá automáticamente
+        await signOut(auth); // ✅ Firebase Interaction
+        // El _layout.tsx detectara el cambio y redirigira
       } catch (error) {
-        console.error("Error al cerrar sesión:", error);
+        console.log("❌❌❌❌ Error al cerrar sesión:", error); // ✅ General Error
+        // -----------------------
         if (Platform.OS === 'web') {
-          if (window.confirm("No pudimos cerrar sesión. ¿Querés intentar nuevamente?")) {
-            await confirmLogout();
-          }
+            window.alert("No pudimos cerrar sesión. Intentá nuevamente.");
         } else {
           Alert.alert("Error", "No pudimos cerrar sesión. Intentá nuevamente.");
         }
       }
     };
 
+    // Alerta de confirmacion (distinta para web y native)
     if (Platform.OS === 'web') {
       if (window.confirm("¿Querés salir de la cuenta de farmacia?")) {
         await confirmLogout();
@@ -136,16 +120,19 @@ export default function FarmaciaHome() {
     }
   };
 
+  // Render de carga
   if (loading) {
     return (
       <SafeAreaView style={globalStyles.container}>
         <View style={styles.centerRow}>
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Cargando farmacia...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // Render principal
   return (
     <SafeAreaView style={globalStyles.container} edges={["top", "bottom"]}>
       <ScrollView
@@ -247,7 +234,7 @@ export default function FarmaciaHome() {
           </Pressable>
         </View>
 
-        {/* Cerrar sesión */}
+        {/* Cerrar sesion */}
         <View style={styles.logoutContainer}>
           <Pressable
             style={({ pressed }) => [
@@ -267,6 +254,7 @@ export default function FarmaciaHome() {
   );
 }
 
+// (Estilos sin cambios)
 const styles = StyleSheet.create({
   scrollContent: {
     alignItems: "center",
@@ -396,6 +384,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 8, 
   },
   loadingText: {
     color: colors.textSecondary,

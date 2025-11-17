@@ -7,10 +7,7 @@ import { Badge } from "../components/common/badge";
 import { getEstadoPedidoBadge, puedeReintentarPago } from "../lib/estadosHelpers";
 import { formatDate, formatCurrency } from "../lib/formatHelpers";
 
-// ============================================================================
 // EMPTY STATE
-// ============================================================================
-
 export function EmptyState() {
   return (
     <View style={globalStyles.emptyContainer}>
@@ -23,10 +20,7 @@ export function EmptyState() {
   );
 }
 
-// ============================================================================
 // PEDIDO CARD
-// ============================================================================
-
 interface PedidoCardProps {
   pedido: Pedido;
   pedidoNumero: number;
@@ -64,12 +58,12 @@ export function PedidoCard({
           </View>
 
           <View style={styles.cardBody}>
-          <Badge
-            icon={badge.icon as any}
-            backgroundColor={badge.bg}
-            textColor={badge.color}
-            text={badge.label}
-            size="small"
+            <Badge
+              icon={badge.icon as any}
+              backgroundColor={badge.bg}
+              textColor={badge.color}
+              text={badge.label}
+              size="small"
             />
             <Text style={styles.precio}>{formatCurrency(pedido.precio)}</Text>
           </View>
@@ -92,10 +86,7 @@ export function PedidoCard({
   );
 }
 
-// ============================================================================
 // DETALLE MODAL
-// ============================================================================
-
 interface DetalleModalProps {
   visible: boolean;
   detalle: DetallePedido | null;
@@ -131,34 +122,70 @@ export function DetalleModal({
           </View>
 
           <ScrollView style={styles.modalBody}>
+            {/* Estado */}
             <InfoSection icon={badge.icon as any} iconColor={badge.color} title="Estado">
               <Text style={styles.infoText}>{badge.label}</Text>
             </InfoSection>
 
-            <InfoSection icon="medical-outline" title="Medicamento">
-              <Text style={[styles.infoText, styles.infoTextFlex]}>
-                {detalle.farmacia.nombre}
-              </Text>
+            {/* Farmacia */}
+            <InfoSection icon="storefront-outline" title="Farmacia">
+              <View style={styles.infoTextContainer}>
+                <Text style={[styles.infoText, styles.infoTextBold]}>
+                  {detalle.farmacia.nombre}
+                </Text>
+                <Text style={styles.infoTextSecondary}>
+                  {detalle.farmacia.direccion}
+                </Text>
+                {detalle.farmacia.email && (
+                  <Text style={styles.infoTextSecondary}>
+                    {detalle.farmacia.email}
+                  </Text>
+                )}
+                {detalle.farmacia.telefono && (
+                  <Text style={styles.infoTextSecondary}>
+                    Tel: {detalle.farmacia.telefono}
+                  </Text>
+                )}
+                {detalle.farmacia.horario && (
+                  <Text style={styles.infoTextSecondary}>
+                    {detalle.farmacia.horario}
+                  </Text>
+                )}
+              </View>
             </InfoSection>
 
+            {/* Descripción */}
+            {detalle.pedido.descripcion && (
+              <InfoSection icon="medical-outline" title="Descripción">
+                <Text style={styles.infoText}>
+                  {detalle.pedido.descripcion}
+                </Text>
+              </InfoSection>
+            )}
+
+            {/* Datos del cliente */}
             <InfoSection icon="person-outline" title="Datos del cliente">
               <Text style={styles.infoText}>{detalle.usuario.nombre}</Text>
             </InfoSection>
 
+            {/* Dirección de envío */}
             <InfoSection icon="location-outline" title="Dirección de envío">
               <Text style={styles.infoText}>{detalle.usuario.direccionEnvio}</Text>
             </InfoSection>
 
+            {/* Obra Social */}
             <InfoSection icon="medkit-outline" title="Obra Social">
               <Text style={styles.infoText}>{detalle.usuario.obraSocial}</Text>
             </InfoSection>
 
+            {/* Fecha de creación */}
             <InfoSection icon="calendar-outline" title="Fecha de creación">
               <Text style={styles.infoText}>
                 {formatDate(detalle.pedido.fechaCreacion)}
               </Text>
             </InfoSection>
 
+            {/* Fecha de pago */}
             {detalle.pedido.fechaPago && (
               <InfoSection icon="card-outline" title="Fecha de pago">
                 <Text style={styles.infoText}>
@@ -167,12 +194,14 @@ export function DetalleModal({
               </InfoSection>
             )}
 
+            {/* ID de pago */}
             {detalle.pedido.paymentId && (
               <InfoSection icon="receipt-outline" title="ID de pago">
                 <Text style={styles.infoText}>{detalle.pedido.paymentId}</Text>
               </InfoSection>
             )}
 
+            {/* Total */}
             <View style={styles.priceSection}>
               <Text style={styles.priceSectionTitle}>Total</Text>
               <Text style={styles.price}>{formatCurrency(detalle.pedido.precio)}</Text>
@@ -212,10 +241,7 @@ export function DetalleModal({
   );
 }
 
-// ============================================================================
 // INFO SECTION (Componente reutilizable)
-// ============================================================================
-
 interface InfoSectionProps {
   icon: string;
   iconColor?: string;
@@ -240,10 +266,7 @@ function InfoSection({
   );
 }
 
-// ============================================================================
 // ESTILOS 
-// ============================================================================
-
 const styles = StyleSheet.create({
   // PedidoCard
   cardContent: {
@@ -342,8 +365,17 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: "600",
   },
-  infoTextFlex: {
+  infoTextBold: {
+    fontWeight: "700",
+  },
+  infoTextContainer: {
     flex: 1,
+    gap: 4,
+  },
+  infoTextSecondary: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: "400",
   },
   priceSection: {
     flexDirection: "row",

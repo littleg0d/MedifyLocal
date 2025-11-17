@@ -1,4 +1,4 @@
-import { Address, Cotizacion, Receta, EstadoConfig } from "../../../assets/types";
+import { Address, Cotizacion, Receta, EstadoConfig, PedidoActivoReceta } from "../../../assets/types";
 
 // Tipo para el botón de acción
 export type TipoBoton = "pagar" | "reintentar" | "procesando" | "pagado" | "bloqueado";
@@ -13,8 +13,8 @@ export interface PaymentViewProps {
   cotizacion: Cotizacion | null;
   receta: Receta | null;
   direccionUsuario: Address | null;
-  pedidoExistente: any;
-  errorPedido: any;
+  pedidoExistente: PedidoActivoReceta | null;
+  errorPedido: Error | null;
   
   // Computed values
   estadoConfig: EstadoConfig | null;
@@ -29,6 +29,11 @@ export interface PaymentViewProps {
   onGoBack: () => void;
   onGoToProfile: () => void;
   onGoToPedidos: () => void;
+  
+  // Props del modal
+  showModal: boolean;
+  modalSuccess: boolean;
+  handleCloseModal: () => void;
 }
 
 // Return type del hook usePaymentLogic
@@ -38,9 +43,14 @@ export interface UsePaymentLogicReturn {
   cotizacion: Cotizacion | null;
   receta: Receta | null;
   direccionUsuario: Address | null;
-  pedidoExistente: any;
-  errorPedido: any;
+  pedidoExistente: PedidoActivoReceta | null;
+  errorPedido: Error | null;
   estadoConfig: EstadoConfig | null;
   tipoBoton: TipoBoton;
   handlePagar: () => Promise<void>;
+  
+  // Propiedades del modal
+  showModal: boolean;
+  modalSuccess: boolean;
+  handleCloseModal: () => void;
 }

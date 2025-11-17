@@ -10,15 +10,17 @@ import {
   Cotizacion,
   Receta,
   PreferenciaResponse,
+  PedidoActivoReceta,
 } from "../../../assets/types";
 
-import { navigateToPedidos, navigateToPerfil } from "../../lib/navigationHelpers";
+import { navigateToPedidos } from "../../lib/navigationHelpers";
 import { useUltimoPedidoPorReceta } from "../../lib/firestoreHooks";
 import { getEstadoPedidoConfig } from "../../lib/estadosHelpers";
 import { isAddressValid, esPedidoDuplicado, ALERT_DELAY_MS } from "../../lib/formatHelpers";
+import { mapCotizacionFromFirestore, mapRecetaFromFirestore } from "../../lib/firestoreMappers";
 import { UsePaymentLogicReturn, TipoBoton } from "../types";
+import { usePaymentStatusListener } from "../components/usePaymentStatusListener";
 
-// ✅ Nuevo tipo simplificado para el request
 interface PreferenciaRequestSimple {
   userId: string;
   farmaciaId: string;
@@ -37,27 +39,57 @@ export function usePaymentLogic(
   const [cotizacion, setCotizacion] = useState<Cotizacion | null>(null);
   const [receta, setReceta] = useState<Receta | null>(null);
   const [direccionUsuario, setDireccionUsuario] = useState<Address | null>(null);
-
-  // Hook de pedido en tiempo real
+  
+  // Estados para el modal de resultado de pago
+  const [showModal, setShowModal] = useState(false);
+  const [modalSuccess, setModalSuccess] = useState(false);
+  
+  // Hook de pedido en tiempo real (Firebase Listener)
   const { pedido: pedidoExistente, loading: loadingPedido, error: errorPedido } =
     useUltimoPedidoPorReceta(recetaId);
 
-  // ⭐ REF para controlar el timeout y evitar race conditions
-  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const alertTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ⭐ Limpiar timeout cuando el componente se desmonte
   useEffect(() => {
     return () => {
       if (alertTimeoutRef.current) {
         clearTimeout(alertTimeoutRef.current);
+        alertTimeoutRef.current = null;
       }
     };
   }, []);
+
+  // ==================== FUNCIONES CALLBACK PARA EL HOOK LISTENER ====================
+  const handlePaymentSuccess = useCallback(() => {
+    setModalSuccess(true);
+    setShowModal(true);
+  }, []);
+
+  const handlePaymentFailed = useCallback(() => {
+    setModalSuccess(false);
+    setShowModal(true);
+  }, []);
+  
+  // ==================== INTEGRACIÓN DEL HOOK DE ESCUCHA DE ESTADO ====================
+  usePaymentStatusListener({
+    pedidoExistente,
+    cotizacionId,
+    onPaymentSuccess: handlePaymentSuccess,
+    onPaymentFailed: handlePaymentFailed,
+  });
+
+  // ==================== MANEJADOR DEL MODAL ====================
+  const handleCloseModal = useCallback(() => {
+    setShowModal(false);
+    // Redirigir a pedidos siempre al cerrar el modal
+    navigateToPedidos(router);
+  }, [router]);
 
   // ==================== AUTH GUARD ====================
   useEffect(() => {
     const userId = auth.currentUser?.uid;
     if (!userId) {
+      // Si no hay usuario, forzar alerta y redirección
       if (Platform.OS === 'web') {
         window.alert("Sesión expirada. Por favor inicia sesión nuevamente");
       } else {
@@ -68,31 +100,30 @@ export function usePaymentLogic(
     }
   }, [router]);
 
-  // ==================== CARGA DE DIRECCIÓN ====================
+  // ==================== CARGA DE DIRECCIÓN DESDE LA RECETA (Firebase) ====================
   useFocusEffect(
     useCallback(() => {
-      const loadDireccion = async () => {
+      const loadDireccionDesdeReceta = async () => {
         try {
-          const userId = auth.currentUser?.uid;
-          if (!userId) return;
+          if (!recetaId) return;
 
-          const userRef = doc(db, "users", userId);
-          const userSnap = await getDoc(userRef);
+          const recetaRef = doc(db, "recetas", recetaId);
+          const recetaSnap = await getDoc(recetaRef);
 
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
-            setDireccionUsuario(userData.address || null);
+          if (recetaSnap.exists()) {
+            const recetaData = recetaSnap.data();
+            setDireccionUsuario(recetaData.userAddress || null);
           }
         } catch (error) {
-          console.error("Error al cargar dirección:", error);
+          console.error("❌ Error al cargar dirección desde receta (Firebase):", error);
         }
       };
 
-      loadDireccion();
-    }, [router])
+      loadDireccionDesdeReceta();
+    }, [recetaId])
   );
 
-  // ==================== CARGA DE DATOS ESTÁTICOS ====================
+  // ==================== CARGA DE DATOS ESTÁTICOS (Firebase) ====================
   useEffect(() => {
     if (!recetaId || !cotizacionId) {
       const mensaje = "Faltan parámetros necesarios";
@@ -120,7 +151,7 @@ export function usePaymentLogic(
           return;
         }
 
-        // Cargar en paralelo
+        // Cargar en paralelo (Firebase Interaction)
         const [cotizacionSnap, recetaSnap] = await Promise.all([
           getDoc(doc(db, "recetas", recetaId, "cotizaciones", cotizacionId)),
           getDoc(doc(db, "recetas", recetaId)),
@@ -137,30 +168,21 @@ export function usePaymentLogic(
           return;
         }
 
-        const cotizacionData = cotizacionSnap.data();
-        setCotizacion({
-          id: cotizacionSnap.id,
-          farmaciaId: cotizacionData.farmaciaId,
-          nombreComercial: cotizacionData.nombreComercial,
-          direccion: cotizacionData.direccion,
-          precio: cotizacionData.precio,
-          estado: cotizacionData.estado,
-          fechaCreacion: cotizacionData.fechaCreacion.toDate(),
-          imagenUrl: cotizacionData.imagenUrl,
-        });
+        const cotizacionCompleta = mapCotizacionFromFirestore(
+          cotizacionSnap.id,
+          cotizacionSnap.data()
+        );
+        setCotizacion(cotizacionCompleta);
 
         if (recetaSnap.exists()) {
-          const recetaData = recetaSnap.data();
-          setReceta({
-            id: recetaSnap.id,
-            imagenUrl: recetaData.imagenUrl,
-            userId: recetaData.userId,
-            estado: recetaData.estado,
-            fechaCreacion: recetaData.fechaCreacion.toDate(),
-          });
+          const recetaCompleta = mapRecetaFromFirestore(
+            recetaSnap.id,
+            recetaSnap.data()
+          );
+          setReceta(recetaCompleta);
         }
       } catch (error) {
-        console.error("Error al cargar datos estáticos:", error);
+        console.error("❌ Error al cargar datos estáticos (Firebase):", error);
         const mensaje = "No pudimos cargar los datos del pago";
         if (Platform.OS === 'web') {
           window.alert(mensaje);
@@ -176,7 +198,7 @@ export function usePaymentLogic(
     loadStaticData();
   }, [recetaId, cotizacionId, router]);
 
-  // ==================== CREAR PREFERENCIA (SIMPLIFICADO) ====================
+  // ==================== CREAR PREFERENCIA (API Request) ====================
   const crearPreferencia = useCallback(async (): Promise<PreferenciaResponse> => {
     if (!cotizacion) {
       throw new Error("Faltan datos de cotización");
@@ -187,15 +209,12 @@ export function usePaymentLogic(
       throw new Error("Usuario no autenticado");
     }
 
-    // ✅ Solo enviar IDs - El backend obtiene todo lo demás desde Firebase
     const request: PreferenciaRequestSimple = {
       userId: userId,
       farmaciaId: cotizacion.farmaciaId,
       recetaId: recetaId,
       cotizacionId: cotizacionId,
     };
-
-    console.log("📤 Enviando request simplificado:", request);
 
     const response = await fetch(`${API_URL}/api/pagos/crear-preferencia`, {
       method: "POST",
@@ -207,6 +226,7 @@ export function usePaymentLogic(
       const errorData = await response
         .json()
         .catch(() => ({ error: "Error desconocido" }));
+      console.error(`❌ Error al crear preferencia (API ${response.status}):`, errorData);
       throw new Error(errorData.error || `Error ${response.status}`);
     }
 
@@ -217,29 +237,20 @@ export function usePaymentLogic(
   const handlePagar = useCallback(async () => {
     if (procesandoPago) return;
 
-    // Validar dirección
     if (!isAddressValid(direccionUsuario)) {
       if (Platform.OS === 'web') {
-        const confirmar = window.confirm(
-          "Dirección incompleta\n\nPor favor completa tu dirección en el perfil antes de realizar el pago"
+        window.alert(
+          "La receta no tiene dirección válida. Por favor, vuelve a cargar la receta con una dirección configurada."
         );
-        if (confirmar) {
-          navigateToPerfil(router);
-        }
       } else {
         Alert.alert(
-          "Dirección incompleta",
-          "Por favor completa tu dirección en el perfil antes de realizar el pago",
-          [
-            { text: "Cancelar", style: "cancel" },
-            { text: "Ir al perfil", onPress: () => navigateToPerfil(router) },
-          ]
+          "Dirección inválida",
+          "La receta no tiene dirección válida. Por favor, vuelve a cargar la receta con una dirección configurada."
         );
       }
       return;
     }
 
-    // Validar disponibilidad usando estado actual
     if (cotizacion?.estado !== "cotizado") {
       if (Platform.OS === 'web') {
         window.alert("Esta cotización ya no está disponible.");
@@ -259,15 +270,12 @@ export function usePaymentLogic(
     try {
       const response = await crearPreferencia();
       
-      // ⭐ ABRIR URL CON SOPORTE WEB Y MÓVIL
       let opened = false;
       
       if (Platform.OS === 'web') {
-        // En web usar window.open
         const ventana = window.open(response.paymentUrl, '_blank');
         opened = ventana !== null;
       } else {
-        // En móvil usar Linking
         const canOpen = await Linking.canOpenURL(response.paymentUrl);
         if (canOpen) {
           await Linking.openURL(response.paymentUrl);
@@ -279,33 +287,42 @@ export function usePaymentLogic(
         throw new Error("No se pudo abrir el enlace de pago");
       }
 
-      // Mostrar confirmación después de abrir MercadoPago
+      // Limpiar timeout previo si existe
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+      }
+
+      // Mostrar alerta después de un delay
       alertTimeoutRef.current = setTimeout(() => {
-        if (procesandoPago) {
-          if (Platform.OS === 'web') {
-            const irAPedidos = window.confirm(
-              "Completa tu pago\n\nSe abrió MercadoPago.\n\nCuando termines, vuelve a la app y verifica el estado en 'Mis Pedidos'."
-            );
-            if (irAPedidos) {
-              navigateToPedidos(router);
-            }
-          } else {
-            Alert.alert(
-              "Completa tu pago",
-              "Se abrió MercadoPago.\n\nCuando termines, vuelve a la app y verifica el estado en 'Mis Pedidos'.",
-              [
-                { text: "Cancelar", style: "cancel" },
-                { text: "Ver Pedidos", onPress: () => navigateToPedidos(router) },
-              ]
-            );
+        // Verificar que el componente siga montado
+        if (!procesandoPago) {
+          alertTimeoutRef.current = null;
+          return;
+        }
+
+        if (Platform.OS === 'web') {
+          const irAPedidos = window.confirm(
+            "Completa tu pago\n\nSe abrió MercadoPago.\n\nCuando termines, vuelve a la app y verifica el estado en 'Mis Pedidos'."
+          );
+          if (irAPedidos) {
+            navigateToPedidos(router);
           }
+        } else {
+          Alert.alert(
+            "Completa tu pago",
+            "Se abrió MercadoPago.\n\nCuando termines, vuelve a la app y verifica el estado en 'Mis Pedidos'.",
+            [
+              { text: "Cancelar", style: "cancel" },
+              { text: "Ver Pedidos", onPress: () => navigateToPedidos(router) },
+            ]
+          );
         }
         
         alertTimeoutRef.current = null;
       }, ALERT_DELAY_MS);
       
     } catch (error) {
-      // Limpiar timeout si hay error
+      // Limpiar timeout en caso de error
       if (alertTimeoutRef.current) {
         clearTimeout(alertTimeoutRef.current);
         alertTimeoutRef.current = null;
@@ -332,7 +349,7 @@ export function usePaymentLogic(
           );
         }
       } else {
-        console.error("Error al procesar pago:", error);
+        console.error("❌ Error al procesar pago:", error);
         if (Platform.OS === 'web') {
           window.alert(`Error al procesar pago: ${errorMessage}`);
         } else {
@@ -350,7 +367,7 @@ export function usePaymentLogic(
     router,
   ]);
 
-  // ==================== LÓGICA DEL BOTÓN (con useMemo) ====================
+  // ==================== LÓGICA DEL BOTÓN ====================
   const tipoBoton = useMemo((): TipoBoton => {
     if (!pedidoExistente) return "pagar";
 
@@ -364,13 +381,14 @@ export function usePaymentLogic(
     }
 
     if (!esMismaCotizacion) {
+      // El usuario intentó pagar otra cotización de la misma receta
       if (PAYMENT_CONFIG.ESTADOS_BLOQUEANTES.includes(estado as any)) {
-        return "bloqueado";
+        return "bloqueado"; // Bloquear si el pedido existente está pagado/entregado/pendiente
       }
       return "pagar";
     }
 
-    return "bloqueado";
+    return "bloqueado"; // Bloqueo por defecto si no cae en ninguna lógica específica
   }, [pedidoExistente, cotizacionId]);
 
   // ==================== RETURN ====================
@@ -385,5 +403,8 @@ export function usePaymentLogic(
     estadoConfig: pedidoExistente ? getEstadoPedidoConfig(pedidoExistente.estado) : null,
     tipoBoton,
     handlePagar,
+    showModal,
+    modalSuccess,
+    handleCloseModal,
   };
 }

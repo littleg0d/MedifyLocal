@@ -3,13 +3,18 @@ import { Alert , Platform} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
-
 import { globalStyles } from "../../assets/styles";
-import { DetallePedido } from "../../assets/types";
+import { DetallePedido, Pedido } from "../../assets/types";
 import { usePedidosDelUsuario } from "../../src/lib/firestoreHooks";
 import { loadDetallePedido } from "../../src/pedidos/helpers";
 import { EmptyState, PedidoCard, DetalleModal } from "../../src/pedidos/components";
-import { LoadingScreen, ErrorScreen, SimpleHeader, ContentScrollView, ListContainer} from "../../src/components/common";
+import { 
+  LoadingScreen, 
+  ErrorScreen, 
+  SimpleHeader, 
+  ContentScrollView, 
+  ListContainer
+} from "../../src/components/common";
 import { navigateToPagar } from "../../src/lib/navigationHelpers";
 
 export default function Pedidos() {
@@ -20,16 +25,16 @@ export default function Pedidos() {
   const [modalVisible, setModalVisible] = useState(false);
   const [detalleSeleccionado, setDetalleSeleccionado] = useState<DetallePedido | null>(null);
 
+  // Maneja el reintento de pago
   const handleReintentarPago = (recetaId: string, cotizacionId: string) => {
+    
     if (Platform.OS === 'web') {
-      // En web usar confirm nativo
       const confirmar = window.confirm("¿Deseas volver a intentar el pago para este pedido?");
       if (confirmar) {
         setModalVisible(false);
         navigateToPagar(router, recetaId, cotizacionId);
-      }
+      } 
     } else {
-      // En móvil usar Alert de React Native
       Alert.alert(
         "Reintentar Pago",
         "¿Deseas volver a intentar el pago para este pedido?",
@@ -47,25 +52,23 @@ export default function Pedidos() {
     }
   };
 
-  const handleVerDetalle = async (pedidoId: string, index: number) => {
-    try {
-      const detalle = await loadDetallePedido(pedidoId, pedidos, index);
-      setDetalleSeleccionado(detalle);
-      setModalVisible(true);
-    } catch (error) {
-      console.error("Error al cargar detalle:", error);
-      const mensaje = "No pudimos cargar los detalles del pedido.";
-      Platform.OS === 'web' ? window.alert(`Error: ${mensaje}`) : Alert.alert("Error", mensaje);
-    }
+  // Muestra el detalle del pedido en el modal
+  const handleVerDetalle = (pedidoId: string, index: number) => {
+    
+    const detalle = loadDetallePedido(pedidoId, pedidos, index);
+    
+    setDetalleSeleccionado(detalle);
+    setModalVisible(true);
   };
 
-  // Loading state
+  // Renderiza estado de carga
   if (loading) {
     return <LoadingScreen message="Cargando pedidos..." />;
   }
 
-  // Error state
+  // Renderiza estado de error
   if (errorPedidos) {
+    console.log("❌❌❌❌ [Render] Estado: Error en hook usePedidosDelUsuario", errorPedidos);
     return (
       <ErrorScreen
         title="Error de Conexión"
@@ -75,21 +78,26 @@ export default function Pedidos() {
     );
   }
 
-  // Main content
+  // Renderiza contenido principal
+  console.log(`[Render] Estado: OK. Mostrando ${pedidos.length} pedidos.`);
   return (
     <SafeAreaView style={globalStyles.container} edges={["top"]}>
       <SimpleHeader title="Mis Pedidos" />
 
       <ContentScrollView>
         {pedidos.length === 0 ? (
-          <EmptyState />
+          <>
+            {console.log("[Render] Mostrando estado vacio (empty).")}
+            <EmptyState />
+          </>
         ) : (
           <ListContainer>
             {pedidos.map((pedido, index) => (
               <PedidoCard
                 key={pedido.id}
                 pedido={pedido}
-                pedidoNumero={pedidos.length - index}
+                // Número de pedido en orden descendente
+                pedidoNumero={pedidos.length - index} 
                 onPress={() => handleVerDetalle(pedido.id, index)}
                 onReintentarPago={handleReintentarPago}
               />
@@ -101,10 +109,11 @@ export default function Pedidos() {
       <DetalleModal
         visible={modalVisible}
         detalle={detalleSeleccionado}
-        onClose={() => setModalVisible(false)}
+        onClose={() => {
+          setModalVisible(false);
+        }}
         onReintentarPago={handleReintentarPago}
       />
     </SafeAreaView>
   );
 }
-

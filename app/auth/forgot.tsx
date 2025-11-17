@@ -3,16 +3,16 @@ import { useRouter } from "expo-router";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../src/lib/firebase";
 import React, { useState } from "react";
-import { 
-  Alert, 
-  KeyboardAvoidingView, 
-  Platform, 
-  Pressable, 
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
   ScrollView,
-  StyleSheet, 
-  Text, 
-  TextInput, 
-  View 
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { globalStyles, colors } from "../../assets/styles";
@@ -25,6 +25,7 @@ export default function ForgotPassword() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  // Helper simple para validar email
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
@@ -33,60 +34,68 @@ export default function ForgotPassword() {
   const handleResetPassword = async () => {
     setError("");
     setSuccess(false);
+    const trimmedEmail = email.trim();
 
     // Validaciones
-    if (!email.trim()) {
-      setError("Por favor ingresá tu email");
+    if (!trimmedEmail) {
+      console.log("[handleResetPassword] Validacion: Email vacio."); // ✅ Validación
+      setError("Por favor ingresa tu email");
       return;
     }
 
-    if (!validateEmail(email.trim())) {
-      setError("Por favor ingresá un email válido");
+    if (!validateEmail(trimmedEmail)) {
+      console.log("[handleResetPassword] Validacion: Email invalido."); // ✅ Validación
+      setError("Por favor ingresa un email valido");
       return;
     }
 
     try {
       setLoading(true);
+      console.log(
+        `[handleResetPassword] Llamando sendPasswordResetEmail para: ${trimmedEmail}` // ✅ Firebase Interaction
+      );
 
-      // Enviar email de recuperación
-      await sendPasswordResetEmail(auth, email.trim());
+      await sendPasswordResetEmail(auth, trimmedEmail);
 
+      console.log("[handleResetPassword] Email enviado OK."); // ✅ Firebase Success
       setSuccess(true);
 
-      // Mostrar mensaje de éxito
       if (Platform.OS === "web") {
-        alert("¡Email enviado! Revisá tu casilla de correo para restablecer tu contraseña.");
+        alert(
+          "¡Email enviado! Revisa tu casilla de correo para restablecer tu contraseña."
+        );
       } else {
         Alert.alert(
           "¡Email enviado!",
-          "Revisá tu casilla de correo para restablecer tu contraseña. Si no lo ves, revisá la carpeta de spam.",
+          "Revisa tu casilla de correo para restablecer tu contraseña. Si no lo ves, revisa la carpeta de spam.",
           [
             {
               text: "Entendido",
-              onPress: () => router.back()
-            }
+              onPress: () => router.back(),
+            },
           ]
         );
       }
     } catch (e: any) {
-      const code = String(e?.code || "");
-      
-      let errorMessage = "No pudimos enviar el email. Intentá de nuevo.";
-      
+      const code = String(e?.code || "UNKNOWN_ERROR");
+      console.log(`[handleResetPassword] _ERROR_: ${code}`, e.message); // ✅ Firebase Error
+
+      let errorMessage = "No pudimos enviar el email. Intenta de nuevo.";
+
       if (code.includes("auth/user-not-found")) {
         errorMessage = "No existe una cuenta con este email";
       } else if (code.includes("auth/invalid-email")) {
-        errorMessage = "El email ingresado no es válido";
+        errorMessage = "El email ingresado no es valido";
       } else if (code.includes("auth/too-many-requests")) {
-        errorMessage = "Demasiados intentos. Esperá unos minutos";
+        errorMessage = "Demasiados intentos. Espera unos minutos";
       } else if (code.includes("auth/network-request-failed")) {
-        errorMessage = "Error de conexión. Verificá tu internet";
+        errorMessage = "Error de conexion. Verifica tu internet";
       }
-      
+
       setError(errorMessage);
-      
+
       if (__DEV__) {
-        console.error("Reset password error:", code, e.message);
+        console.log(" ❌❌❌ Reset password error (raw):", e); // ✅ Debug/Error
       }
     } finally {
       setLoading(false);
@@ -95,8 +104,8 @@ export default function ForgotPassword() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
@@ -112,9 +121,10 @@ export default function ForgotPassword() {
             </View>
 
             <Text style={styles.title}>¿Olvidaste tu contraseña?</Text>
-            
+
             <Text style={styles.subtitle}>
-              No te preocupes, te enviaremos un email con instrucciones para restablecer tu contraseña.
+              No te preocupes, te enviaremos un email con instrucciones para
+              restablecer tu contraseña.
             </Text>
 
             {/* Mensaje de error */}
@@ -125,12 +135,16 @@ export default function ForgotPassword() {
               </View>
             ) : null}
 
-            {/* Mensaje de éxito */}
+            {/* Mensaje de exito */}
             {success ? (
               <View style={styles.successContainer}>
-                <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color="#059669"
+                />
                 <Text style={styles.successText}>
-                  Email enviado correctamente. Revisá tu casilla.
+                  Email enviado correctamente. Revisa tu casilla.
                 </Text>
               </View>
             ) : null}
@@ -144,6 +158,7 @@ export default function ForgotPassword() {
                   value={email}
                   onChangeText={(text) => {
                     setEmail(text);
+                    // Limpiar estados al tipear
                     setError("");
                     setSuccess(false);
                   }}
@@ -159,32 +174,37 @@ export default function ForgotPassword() {
                 />
               </View>
 
-              <Pressable 
+              <Pressable
                 style={({ pressed }) => [
                   globalStyles.primaryButton,
                   pressed && !loading && globalStyles.buttonPressed,
                   loading && globalStyles.buttonDisabled,
-                  { marginTop: 8 }
-                ]} 
-                onPress={handleResetPassword} 
+                  { marginTop: 8 },
+                ]}
+                onPress={handleResetPassword}
                 disabled={loading}
               >
                 <Text style={globalStyles.primaryButtonText}>
-                  {loading ? "Enviando..." : "Enviar email de recuperación"}
+                  {loading ? "Enviando..." : "Enviar email de recuperacion"}
                 </Text>
               </Pressable>
             </View>
 
             {/* Info adicional */}
             <View style={styles.infoBox}>
-              <Ionicons name="information-circle-outline" size={20} color={colors.info} />
+              <Ionicons
+                name="information-circle-outline"
+                size={20}
+                color={colors.info}
+              />
               <Text style={styles.infoText}>
-                El email puede tardar unos minutos en llegar. Si no lo ves, revisá la carpeta de spam o correo no deseado.
+                El email puede tardar unos minutos en llegar. Si no lo ves,
+                revisá la carpeta de spam o correo no deseado.
               </Text>
             </View>
 
             {/* Link para volver */}
-            <Pressable 
+            <Pressable
               style={styles.backToLogin}
               onPress={() => router.back()}
             >
@@ -223,13 +243,13 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     textAlign: "center",
   },
-  subtitle: { 
-    fontSize: 15, 
+  subtitle: {
+    fontSize: 15,
     color: colors.textSecondary,
     textAlign: "center",
     lineHeight: 22,
   },
-  form: { 
+  form: {
     width: "100%",
     marginTop: 8,
   },

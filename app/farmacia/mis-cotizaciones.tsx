@@ -1,4 +1,3 @@
-// app/farmacia/mis-cotizaciones.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -10,7 +9,7 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
-  Alert, // ✅ Importado
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../src/lib/firebase";
@@ -19,54 +18,48 @@ import {
   getDocs,
   doc,
   getDoc,
-  query, // ✅ Importado
-  where, // ✅ Importado
-} from "firebase/firestore";
+  query,
+  where,
+  collectionGroup,
+}
+ from "firebase/firestore";
 import { globalStyles, colors } from "../../assets/styles";
+import { Cotizacion, Address, ObraSocial } from "../../assets/types"; 
+import { 
+  formatObraSocial, 
+  formatDate, 
+  formatPrice,
+  formatAddress
+} from "../../src/lib/formatHelpers";
 
-interface Cotizacion {
-  id: string;
-  recetaId: string;
-  estado: string;
-  descripcion?: string;
-  precio?: number;
-  fechaRespuesta?: any;
-  // Datos de la receta
-  direccion?: string;
-  recetaDescripcion?: string;
-  userName?: string;
-  userPhone?: string;
-  userDNI?: string;
-  userObraSocial?: {
-    name: string;
-    number?: string;
-  };
+// Definición local de un tipo que extiende Cotizacion con los datos denormalizados del paciente (Receta)
+interface CotizacionConReceta extends Cotizacion {
+    recetaId: string; // La Cotización original no lo tiene, pero se añade aquí
+    userName?: string;
+    userEmail?: string;
+    userDNI?: string;
+    userPhone?: string;
+    userAddress?: Address;
+    userObraSocial?: ObraSocial;
+    imagenUrl?: string; // Imagen de la Receta
 }
 
-/**
- * Helper para formatear Obra Social
- */
-const formatObraSocial = (os?: { name: string; number?: string }) => {
-  if (!os || !os.name) {
-    return "Sin obra social";
-  }
-  if (os.number) {
-    return `${os.name} (${os.number})`;
-  }
-  return os.name;
-};
 
+// Pantalla para ver cotizaciones ya enviadas por la farmacia
 export default function MisCotizaciones() {
   const router = useRouter();
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
-  const [loading, setLoading] = useState(true); // ✅ Inicia en true
+  // Usamos el tipo extendido
+  const [cotizaciones, setCotizaciones] = useState<CotizacionConReceta[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [farmaciaId, setFarmaciaId] = useState<string | null>(null);
 
+  // Carga inicial
   useEffect(() => {
     loadFarmaciaAndCotizaciones();
   }, []);
 
+  // Obtiene el ID de la farmacia (user.uid) y dispara la carga
   const loadFarmaciaAndCotizaciones = async () => {
     try {
       const user = auth.currentUser;
@@ -75,92 +68,94 @@ export default function MisCotizaciones() {
         return;
       }
 
-      const farmaciaRef = doc(db, "farmacias", user.uid);
-      const farmaciaSnap = await getDoc(farmaciaRef);
-
-      let fId = user.uid;
-      if (farmaciaSnap.exists()) {
-        fId = farmaciaSnap.id;
-      }
-
+      const fId = user.uid;
       setFarmaciaId(fId);
       await loadCotizaciones(fId);
     } catch (error) {
-      console.error("Error cargando farmacia:", error);
+      console.log("❌❌❌❌ Error cargando farmacia:", error); 
+      Alert.alert("Error", "No se pudo cargar la información de la farmacia");
     }
   };
 
+  // Logica de carga de cotizaciones usando la subcolección
   const loadCotizaciones = async (fId: string) => {
     try {
       if (!refreshing) {
         setLoading(true);
       }
 
-      const recetasRef = collection(db, "recetas");
+      // Query: Buscar en todas las subcolecciones farmaciasRespondieron
+      const farmaciasRespondieronRef = collectionGroup(db, "farmaciasRespondieron");
+      const q = query(farmaciasRespondieronRef, where("farmaciaId", "==", fId));
+      
+      const snapshot = await getDocs(q); 
 
-      // ✅ CAMBIO: Query eficiente. Excluye recetas finalizadas.
-      // Esto PUEDE requerir un índice en Firestore (sobre el campo 'estado')
-      const q = query(recetasRef, where("estado", "!=", "finalizada"));
-
-      const recetasSnap = await getDocs(q);
-
-      const misCotizaciones: Cotizacion[] = [];
-
-      for (const recetaDoc of recetasSnap.docs) {
-        const recetaData = recetaDoc.data();
-
-        // ❗ Ya no es necesario filtrar por 'finalizada' aquí
-
-        // Buscar si respondimos en esta receta
-        const farmaciaRespondioRef = doc(
-          db,
-          "recetas",
-          recetaDoc.id,
-          "farmaciasRespondieron",
-          fId
-        );
-        const farmaciaRespondioSnap = await getDoc(farmaciaRespondioRef);
-
-        if (farmaciaRespondioSnap.exists()) {
-          const farmaciaData = farmaciaRespondioSnap.data();
-
-          misCotizaciones.push({
-            id: farmaciaData.cotizacionId || farmaciaRespondioSnap.id,
-            recetaId: recetaDoc.id,
-            estado: farmaciaData.estado || "cotizado",
-            descripcion: farmaciaData.descripcion,
-            precio: farmaciaData.precio,
-            fechaRespuesta: farmaciaData.fechaRespuesta,
-            // Datos de la receta
-            userObraSocial: recetaData.userObraSocial,
-            userDNI: recetaData.userDNI,
-            userPhone: recetaData.userPhone,
-            userName: recetaData.userName,
-            direccion: recetaData.userAddress
-              ? `${recetaData.userAddress.street}, ${recetaData.userAddress.city}`
-              : undefined,
-            recetaDescripcion: recetaData.descripcion,
-          });
+      // Para cada respuesta, obtener los datos de la receta padre
+      const promises = snapshot.docs.map(async (respuestaDoc) => {
+        const respuestaData = respuestaDoc.data();
+        
+        // El path del documento es: recetas/{recetaId}/farmaciasRespondieron/{farmaciaId}
+        const recetaId = respuestaDoc.ref.parent.parent?.id;
+        
+        if (!recetaId) {
+          return null;
         }
-      }
 
-      // Ordenar por fecha más reciente
-      misCotizaciones.sort((a, b) => {
-        if (!a.fechaRespuesta || !b.fechaRespuesta) return 0;
-        const aTime = a.fechaRespuesta.seconds || 0;
-        const bTime = b.fechaRespuesta.seconds || 0;
+        // Obtener datos de la receta
+        const recetaRef = doc(db, "recetas", recetaId);
+        const recetaSnap = await getDoc(recetaRef); 
+        
+        if (!recetaSnap.exists()) {
+          return null;
+        }
+
+        const recetaData = recetaSnap.data();
+
+        // Mapeo a CotizacionConReceta
+        return {
+          // Datos de la Cotización (desde respuestaData)
+          id: respuestaData.cotizacionId || respuestaDoc.id,
+          farmaciaId: fId,
+          nombreComercial: respuestaData.nombreComercial || "",
+          direccion: respuestaData.direccion || "",
+          estado: respuestaData.estado || "cotizado",
+          descripcion: respuestaData.descripcion, 
+          precio: respuestaData.precio,
+          fechaCreacion: respuestaData.fechaRespuesta?.toDate(), // Asume que fechaRespuesta es un Timestamp
+          
+          // Datos de la Receta (desde recetaData)
+          recetaId: recetaId,
+          userName: recetaData.userName,
+          userEmail: recetaData.userEmail,
+          userPhone: recetaData.userPhone,
+          userDNI: recetaData.userDNI,
+          userObraSocial: (recetaData.userObraSocial || undefined) as ObraSocial | undefined, 
+          userAddress: (recetaData.userAddress || undefined) as Address | undefined, 
+          imagenUrl: recetaData.imagenUrl,
+        } as CotizacionConReceta;
+      });
+
+      const results = await Promise.all(promises);
+      const filteredCotizaciones = results.filter((c): c is CotizacionConReceta => c !== null);
+
+      // Ordenar por fecha mas reciente (localmente)
+      filteredCotizaciones.sort((a, b) => {
+        // Corrección en la lógica de ordenamiento para asegurar que se comparan fechas válidas
+        const aTime = a.fechaCreacion instanceof Date ? a.fechaCreacion.getTime() : 0;
+        const bTime = b.fechaCreacion instanceof Date ? b.fechaCreacion.getTime() : 0;
         return bTime - aTime;
       });
 
-      setCotizaciones(misCotizaciones);
+      setCotizaciones(filteredCotizaciones);
+
     } catch (error) {
-      console.error("Error cargando cotizaciones:", error);
+      console.log("❌❌❌❌ Error cargando cotizaciones (Firebase):", error); 
       Alert.alert(
         "Error de consulta",
-        "No se pudieron cargar las cotizaciones. Es posible que falte un índice en Firestore (sobre el campo 'estado'). Revisa la consola."
+        "No se pudieron cargar las cotizaciones."
       );
     } finally {
-      setLoading(false); // ✅ Desactiva el "cargando"
+      setLoading(false);
       setRefreshing(false);
     }
   };
@@ -172,17 +167,31 @@ export default function MisCotizaciones() {
     }
   };
 
-  const formatPrice = (price?: number) => {
-    // ... (formatPrice logic)
-  };
-  const formatDate = (timestamp?: any) => {
-    // ... (formatDate logic)
-  };
+  // Helper para badges
   const getEstadoBadge = (estado: string) => {
-    // ... (getEstadoBadge logic)
+    const estados: Record<string, { label: string; color: string; bg: string }> = {
+      cotizado: { label: "Cotizado", color: "#10B981", bg: "#D1FAE5" },
+      no_disponible: { label: "No Disponible", color: "#EF4444", bg: "#FEE2E2" },
+      sin_stock: { label: "Sin Stock", color: "#F59E0B", bg: "#FEF3C7" },
+      rechazada: { label: "Rechazada", color: "#EF4444", bg: "#FEE2E2" },
+    };
+
+    const estadoInfo = estados[estado] || {
+      label: estado,
+      color: "#6B7280",
+      bg: "#F3F4F6",
+    };
+
+    return (
+      <View style={[styles.badge, { backgroundColor: estadoInfo.bg }]}>
+        <Text style={[styles.badgeText, { color: estadoInfo.color }]}>
+          {estadoInfo.label}
+        </Text>
+      </View>
+    );
   };
 
-  // ✅ VISTA DE CARGANDO
+  // Render de carga
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={globalStyles.container}>
@@ -194,11 +203,13 @@ export default function MisCotizaciones() {
         </View>
         <View style={styles.centerRow}>
           <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Cargando cotizaciones...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // Render principal
   return (
     <SafeAreaView style={globalStyles.container} edges={["top", "bottom"]}>
       <View style={styles.header}>
@@ -216,9 +227,19 @@ export default function MisCotizaciones() {
         }
       >
         {cotizaciones.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            {/* ... (empty view) */}
-          </View>
+          <>
+            <View style={styles.emptyContainer}>
+              <Ionicons
+                name="receipt-outline"
+                size={64}
+                color={colors.textTertiary}
+              />
+              <Text style={styles.emptyText}>No hay cotizaciones</Text>
+              <Text style={styles.emptySubtext}>
+                Tus respuestas a recetas aparecerán aquí
+              </Text>
+            </View>
+          </>
         ) : (
           <View style={styles.cotizacionesList}>
             {cotizaciones.map((cotizacion) => (
@@ -226,7 +247,7 @@ export default function MisCotizaciones() {
                 key={`${cotizacion.recetaId}-${cotizacion.id}`}
                 style={styles.cotizacionCard}
               >
-                {/* ... (Header) ... */}
+                {/* Header */}
                 <View style={styles.cotizacionHeader}>
                   <Text style={styles.cotizacionId}>
                     Receta #{cotizacion.recetaId.slice(0, 8)}
@@ -234,7 +255,7 @@ export default function MisCotizaciones() {
                   {getEstadoBadge(cotizacion.estado)}
                 </View>
 
-                {/* Paciente (Condicional) */}
+                {/* Informacion del Paciente */}
                 {cotizacion.userName && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -248,19 +269,31 @@ export default function MisCotizaciones() {
                   </View>
                 )}
 
-                {/* Obra Social */}
+                {cotizacion.userEmail && (
+                  <View style={styles.infoRow}>
+                    <Ionicons
+                      name="mail-outline"
+                      size={18}
+                      color={colors.textTertiary}
+                    />
+                    <Text style={styles.infoText}>
+                      {cotizacion.userEmail}
+                    </Text>
+                  </View>
+                )}
+
                 <View style={styles.infoRow}>
                   <Ionicons
                     name="medical-outline"
                     size={18}
                     color={colors.textTertiary}
                   />
+                  {/* userObraSocial ahora es un objeto ObraSocial | undefined */}
                   <Text style={styles.infoText}>
                     {formatObraSocial(cotizacion.userObraSocial)}
                   </Text>
                 </View>
 
-                {/* DNI (Condicional) */}
                 {cotizacion.userDNI && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -274,7 +307,6 @@ export default function MisCotizaciones() {
                   </View>
                 )}
 
-                {/* Teléfono (Condicional) */}
                 {cotizacion.userPhone && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -288,19 +320,37 @@ export default function MisCotizaciones() {
                   </View>
                 )}
 
-                {/* ... (Precio, Descripcion, Direccion, Fecha) ... */}
+                {cotizacion.userAddress && (
+                  <View style={styles.infoRow}>
+                    <Ionicons
+                      name="location-outline"
+                      size={18}
+                      color={colors.textTertiary}
+                    />
+                    {/* userAddress ahora es un objeto Address | undefined */}
+                    <Text style={styles.infoText}>
+                      {formatAddress(cotizacion.userAddress)}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Divider */}
+                <View style={styles.divider} />
+
+                {/* Informacion de la Cotizacion */}
                 {cotizacion.precio != null && (
                   <View style={styles.infoRow}>
                     <Ionicons
                       name="cash-outline"
                       size={18}
-                      color={colors.textTertiary}
+                      color={colors.primary}
                     />
-                    <Text style={styles.infoText}>
-                      Precio: {formatPrice(cotizacion.precio)}
+                    <Text style={[styles.infoText, styles.precioText]}>
+                      ${formatPrice(cotizacion.precio)}
                     </Text>
                   </View>
                 )}
+
                 {cotizacion.descripcion && (
                   <View style={styles.infoRow}>
                     <Ionicons
@@ -313,17 +363,8 @@ export default function MisCotizaciones() {
                     </Text>
                   </View>
                 )}
-                {cotizacion.direccion && (
-                  <View style={styles.infoRow}>
-                    <Ionicons
-                      name="location-outline"
-                      size={18}
-                      color={colors.textTertiary}
-                    />
-                    <Text style={styles.infoText}>{cotizacion.direccion}</Text>
-                  </View>
-                )}
-                {cotizacion.fechaRespuesta && (
+
+                {cotizacion.fechaCreacion && (
                   <View style={styles.infoRow}>
                     <Ionicons
                       name="time-outline"
@@ -331,7 +372,7 @@ export default function MisCotizaciones() {
                       color={colors.textTertiary}
                     />
                     <Text style={styles.infoTextSmall}>
-                      {formatDate(cotizacion.fechaRespuesta)}
+                      Respondido: {formatDate(cotizacion.fechaCreacion)}
                     </Text>
                   </View>
                 )}
@@ -347,7 +388,6 @@ export default function MisCotizaciones() {
 }
 
 const styles = StyleSheet.create({
-  // ... (todos los estilos)
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -366,6 +406,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
   emptyContainer: {
     alignItems: "center",
@@ -385,6 +430,7 @@ const styles = StyleSheet.create({
   },
   cotizacionesList: {
     gap: 12,
+    padding: 16,
   },
   cotizacionCard: {
     backgroundColor: colors.surface,
@@ -393,6 +439,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cotizacionHeader: {
     flexDirection: "row",
@@ -414,6 +465,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 8,
+  },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -423,6 +479,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     flex: 1,
+  },
+  precioText: {
+    fontWeight: "700",
+    fontSize: 16,
+    color: colors.primary,                                       
   },
   infoTextSmall: {
     fontSize: 13,

@@ -16,15 +16,20 @@ import { onAuthStateChanged } from "firebase/auth";
 import { globalStyles, colors } from "../../assets/styles";
 import { navigateToCargarReceta, replaceWithLogin } from "../../src/lib/navigationHelpers";
 
-
+// Pantalla de inicio para el paciente
 export default function DashboardHome() {
   const router = useRouter();
   const [userName, setUserName] = useState("");
   const [loading, setLoading] = useState(true);
 
+  console.log("[DashboardHome] Renderizando...");
+
+  // Cargar nombre de usuario
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log(`[onAuthStateChanged] user? ${!!user}`);
       if (!user) {
+        // Fallback por si el AuthGuard global falla
         replaceWithLogin(router);
         return;
       }
@@ -33,26 +38,37 @@ export default function DashboardHome() {
         const userDocRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(userDocRef);
         
-        const name = userDoc.exists() 
-          ? userDoc.data().firstName || "Usuario"
-          : user.email?.split("@")[0] || "Usuario";
+        let name = "Usuario"; // Default
+        if (userDoc.exists()) {
+          name = userDoc.data().firstName || "Usuario";
+        } else {
+          name = user.email?.split("@")[0] || "Usuario";
+        }
         
+        // Capitalizar primera letra
         setUserName(name.charAt(0).toUpperCase() + name.slice(1));
       } catch (error) {
-        console.error("Error al obtener datos:", error);
-        setUserName("Usuario");
+        // Mantenemos el console.error como pediste
+        console.log("❌❌❌❌ Error al obtener datos:", error);
+        setUserName("Usuario"); // Fallback en caso de error
       } finally {
         setLoading(false);
       }
     });
     
-    return () => unsubscribe();
+    // Cleanup
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
+  // Handler para navegar a Cargar Receta
   const handleUploadRecipe = () => {
+    console.log("[handleUploadRecipe] Navegando a Cargar Receta...");
     navigateToCargarReceta(router);
   };
 
+  // Render de carga
   if (loading) {
     return (
       <SafeAreaView style={globalStyles.container}>
@@ -64,6 +80,8 @@ export default function DashboardHome() {
     );
   }
 
+  // Render principal
+  console.log(`[Render] Estado: OK. Saludando a ${userName}`);
   return (
     <SafeAreaView style={globalStyles.container} edges={["top"]}>
       <ScrollView style={globalStyles.scrollView} showsVerticalScrollIndicator={false}>
@@ -72,7 +90,7 @@ export default function DashboardHome() {
           <Text style={styles.greeting}>Hola, {userName}</Text>
         </View>
 
-        {/* Botón principal */}
+        {/* Boton principal */}
         <Pressable 
           style={({ pressed }) => [
             styles.primaryButton,

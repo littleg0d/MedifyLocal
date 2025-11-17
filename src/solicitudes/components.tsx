@@ -1,4 +1,5 @@
-import { View, Text, Pressable, Modal, ScrollView, Linking, StyleSheet } from "react-native";
+// src/solicitudes/components.tsx
+import { View, Text, Pressable, Modal, ScrollView, Linking, StyleSheet, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { globalStyles, colors } from "../../assets/styles";
 import { Cotizacion, Farmacia } from "../../assets/types";
@@ -9,7 +10,7 @@ import {
   getEstadoPedidoConfig,
   esPedidoCompletado 
 } from "../lib/estadosHelpers";
-import { formatCurrency } from "../lib/formatHelpers";
+import { formatCurrency, formatDate } from "../lib/formatHelpers";
 
 // ============================================================================
 // BANNER BLOQUEO
@@ -59,7 +60,7 @@ interface TarjetaCotizacionProps {
   bloqueada: boolean;
   esActiva: boolean;
   onPagar: () => void;
-  onVerDetalles: (farmacia: Farmacia) => void;
+  onVerDetalles: () => void;
 }
 
 export function TarjetaCotizacion({
@@ -72,12 +73,6 @@ export function TarjetaCotizacion({
   const badge = getEstadoCotizacionConfig(cotizacion.estado);
   const tienePrecio = cotizacion.estado === "cotizado";
 
-  const farmaciaData: Farmacia = {
-    id: cotizacion.farmaciaId,
-    nombreComercial: cotizacion.nombreComercial,
-    direccion: cotizacion.direccion,
-  };
-
   return (
     <View style={globalStyles.card}>
       <View style={styles.cardHeader}>
@@ -85,8 +80,8 @@ export function TarjetaCotizacion({
           <Text style={styles.cardNombre}>{cotizacion.nombreComercial}</Text>
           <Text style={styles.cardDireccion}>{cotizacion.direccion}</Text>
         </View>
-        <Pressable onPress={() => onVerDetalles(farmaciaData)} style={styles.detallesButton}>
-          <Ionicons name="chevron-forward" size={24} color={colors.textTertiary} />
+        <Pressable onPress={onVerDetalles} style={styles.detallesButton}>
+          <Ionicons name="information-circle-outline" size={28} color={colors.primary} />
         </Pressable>
       </View>
 
@@ -142,7 +137,185 @@ export function TarjetaCotizacion({
 }
 
 // ============================================================================
-// DETALLE FARMACIA
+// DETALLE COTIZACIÓN (NUEVO) ✅
+// ============================================================================
+
+interface DetalleCotizacionProps {
+  visible: boolean;
+  cotizacion: Cotizacion | null;
+  onClose: () => void;
+  onPagar?: () => void;
+  bloqueada?: boolean;
+}
+
+export function DetalleCotizacion({ 
+  visible, 
+  cotizacion, 
+  onClose,
+  onPagar,
+  bloqueada = false
+}: DetalleCotizacionProps) {
+  if (!cotizacion) return null;
+
+  const badge = getEstadoCotizacionConfig(cotizacion.estado);
+  const tienePrecio = cotizacion.estado === "cotizado";
+
+  const handleLlamar = () => {
+    if (cotizacion.telefono) {
+      Linking.openURL(`tel:${cotizacion.telefono}`);
+    }
+  };
+
+  const handleEmail = () => {
+    if (cotizacion.email) {
+      Linking.openURL(`mailto:${cotizacion.email}`);
+    }
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <View style={globalStyles.modalOverlay}>
+        <View style={styles.modalContentLarge}>
+          {/* Header */}
+          <View style={styles.modalHeader}>
+            <Text style={globalStyles.modalTitle}>Detalle de Cotización</Text>
+            <Pressable onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={28} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.modalBody}>
+            {/* Imagen de la receta (si existe) */}
+            {cotizacion.imagenUrl && (
+              <View style={styles.imagenRecetaContainer}>
+                <Text style={styles.seccionTitulo}>Receta</Text>
+                <Image
+                  source={{ uri: cotizacion.imagenUrl }}
+                  style={styles.imagenReceta}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
+
+            {/* Estado y Precio */}
+            <View style={styles.precioSection}>
+              <View style={[
+                globalStyles.badge,
+                { backgroundColor: badge.bg, alignSelf: 'flex-start' }
+              ]}>
+                <Text style={[globalStyles.badgeText, { color: badge.text }]}>
+                  {badge.label}
+                </Text>
+              </View>
+
+              {tienePrecio && (
+                <View style={styles.precioContainer}>
+                  <Text style={styles.precioLabel}>Precio Total</Text>
+                  <Text style={styles.precioValor}>
+                    {formatCurrency(cotizacion.precio)}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Descripción de Medicamentos */}
+            {cotizacion.descripcion && (
+              <View style={styles.descripcionSection}>
+                <SeccionDetalle icon="medical" label="Descripción">
+                  <Text style={styles.valorDetalle}>{cotizacion.descripcion}</Text>
+                </SeccionDetalle>
+              </View>
+            )}
+
+            {/* Datos de la Farmacia */}
+            <View style={styles.farmaciaSection}>
+              <Text style={styles.seccionTitulo}>Información de la Farmacia</Text>
+
+              <SeccionDetalle icon="storefront" label="Nombre">
+                <Text style={styles.valorDetalle}>{cotizacion.nombreComercial}</Text>
+              </SeccionDetalle>
+
+              <SeccionDetalle icon="location" label="Dirección">
+                <Text style={styles.valorDetalle}>{cotizacion.direccion}</Text>
+              </SeccionDetalle>
+
+              {cotizacion.telefono && (
+                <Pressable onPress={handleLlamar}>
+                  <SeccionDetalle icon="call" label="Teléfono">
+                    <Text style={[styles.valorDetalle, styles.link]}>
+                      {cotizacion.telefono}
+                    </Text>
+                  </SeccionDetalle>
+                </Pressable>
+              )}
+
+              {cotizacion.email && (
+                <Pressable onPress={handleEmail}>
+                  <SeccionDetalle icon="mail" label="Email">
+                    <Text style={[styles.valorDetalle, styles.link]}>
+                      {cotizacion.email}
+                    </Text>
+                  </SeccionDetalle>
+                </Pressable>
+              )}
+
+              <SeccionDetalle icon="calendar" label="Fecha de cotización">
+                <Text style={styles.valorDetalle}>
+                  {formatDate(cotizacion.fechaCreacion)}
+                </Text>
+              </SeccionDetalle>
+            </View>
+
+            <View style={{ height: 20 }} />
+          </ScrollView>
+
+          {/* Footer con botones */}
+          <View style={styles.modalFooterButtons}>
+            {tienePrecio && onPagar && !bloqueada && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.botonPagarModal,
+                  pressed && globalStyles.buttonPressed,
+                ]}
+                onPress={() => {
+                  onClose();
+                  onPagar();
+                }}
+              >
+                <Text style={styles.botonPagarTexto}>Pagar ahora</Text>
+              </Pressable>
+            )}
+
+            {bloqueada && (
+              <View style={[styles.botonPagarModal, styles.botonBloqueado]}>
+                <Ionicons name="lock-closed" size={16} color={colors.surface} />
+                <Text style={styles.botonPagarTexto}>Bloqueado</Text>
+              </View>
+            )}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.botonCerrar,
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={onClose}
+            >
+              <Text style={styles.botonCerrarTexto}>Cerrar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ============================================================================
+// DETALLE FARMACIA (Mantener para compatibilidad)
 // ============================================================================
 
 interface DetalleFarmaciaProps {
@@ -371,7 +544,90 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
 
-  // DetalleFarmacia
+  // DetalleCotizacion (NUEVO)
+  modalContentLarge: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    maxHeight: "90%",
+  },
+  imagenRecetaContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  imagenReceta: {
+    width: "100%",
+    height: 250,
+    backgroundColor: colors.gray100,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  precioSection: {
+    padding: 20,
+    gap: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  precioContainer: {
+    backgroundColor: colors.primaryLight,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  precioLabel: {
+    fontSize: 14,
+    color: colors.surface,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  precioValor: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: colors.surface,
+  },
+  descripcionSection: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  farmaciaSection: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  seccionTitulo: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 16,
+  },
+  modalFooterButtons: {
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  botonPagarModal: {
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  botonCerrar: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  botonCerrarTexto: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.textSecondary,
+  },
+
+  // DetalleFarmacia (mantener)
   modalContent: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 24,

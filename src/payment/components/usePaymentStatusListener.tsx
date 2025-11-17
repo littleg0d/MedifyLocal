@@ -1,0 +1,125 @@
+// src/payment/hooks/usePaymentStatusListener.ts
+import { useEffect, useRef } from "react";
+import { EstadoPedido, PAYMENT_CONFIG, PedidoActivoReceta } from "../../../assets/types";
+
+interface PaymentStatusListenerProps {
+  pedidoExistente: PedidoActivoReceta | null;
+  cotizacionId: string;
+  onPaymentSuccess: () => void;
+  onPaymentFailed: () => void;
+}
+
+/**
+ * Hook para detectar cambios de estado del pedido en tiempo real
+ * 
+ * - Detecta transiciones de estado (pendiente -> pagado/rechazado)
+ * - Muestra el modal SOLO UNA VEZ por pedido
+ * - Persiste el estado entre recargas usando sessionStorage
+ */
+export function usePaymentStatusListener({
+  pedidoExistente,
+  cotizacionId,
+  onPaymentSuccess,
+  onPaymentFailed,
+}: PaymentStatusListenerProps) {
+  const previousEstadoRef = useRef<EstadoPedido | null>(null);
+  const isFirstRenderRef = useRef(true);
+
+  useEffect(() => {
+    console.log("🔍 [usePaymentStatusListener] Verificando estado del pedido...");
+    
+    // Si no hay pedido, resetear todo
+    if (!pedidoExistente) {
+      console.log("⚪ No hay pedido existente");
+      previousEstadoRef.current = null;
+      isFirstRenderRef.current = true;
+      return;
+    }
+
+    const estadoActual = pedidoExistente.estado as EstadoPedido;
+    const estadoPrevio = previousEstadoRef.current;
+    const esMismaCotizacion = pedidoExistente.cotizacionId === cotizacionId;
+    const pedidoId = pedidoExistente.id;
+
+    console.log("📊 Estado del pedido:", {
+      pedidoId,
+      estadoActual,
+      estadoPrevio,
+      cotizacionPedido: pedidoExistente.cotizacionId,
+      cotizacionActual: cotizacionId,
+      esMismaCotizacion,
+      isFirstRender: isFirstRenderRef.current,
+    });
+
+    // Solo procesar si es la misma cotización
+    if (!esMismaCotizacion) {
+      console.log("⚠️ Pedido de otra cotización, ignorando");
+      previousEstadoRef.current = estadoActual;
+      return;
+    }
+
+    // Clave única para este pedido en sessionStorage
+    const storageKey = `modal_shown_${pedidoId}`;
+    
+    // Verificar si ya mostramos el modal para este pedido
+    const yaSeVioModal = sessionStorage.getItem(storageKey) === 'true';
+
+    // CASO 1: Primera renderización en esta sesión
+    if (isFirstRenderRef.current) {
+      console.log("ℹ️ Primera renderización, guardando estado inicial:", estadoActual);
+      previousEstadoRef.current = estadoActual;
+      isFirstRenderRef.current = false;
+      
+      // Si el pedido ya está en un estado final Y el usuario NO ha visto el modal
+      // (por ejemplo, volvió después de completar el pago en otra pestaña)
+      if (!yaSeVioModal) {
+        if (estadoActual === "pagado") {
+          console.log("✅ Pedido ya pagado al cargar - Mostrando modal de éxito");
+          sessionStorage.setItem(storageKey, 'true');
+          onPaymentSuccess();
+        } else if (PAYMENT_CONFIG.ESTADOS_FALLIDOS.includes(estadoActual as any)) {
+          console.log("❌ Pedido rechazado al cargar - Mostrando modal de error");
+          sessionStorage.setItem(storageKey, 'true');
+          onPaymentFailed();
+        }
+      } else {
+        console.log("✓ Modal ya fue mostrado anteriormente para este pedido");
+      }
+      
+      return;
+    }
+
+    // CASO 2: Detectar cambio de estado en tiempo real
+    if (estadoPrevio !== estadoActual) {
+      console.log(`🔔 ¡Cambio de estado detectado! ${estadoPrevio} -> ${estadoActual}`);
+
+      if (!yaSeVioModal) {
+        if (estadoActual === "pagado") {
+          console.log("✅ Pago exitoso - Mostrando modal");
+          sessionStorage.setItem(storageKey, 'true');
+          onPaymentSuccess();
+        } else if (PAYMENT_CONFIG.ESTADOS_FALLIDOS.includes(estadoActual as any)) {
+          console.log("❌ Pago rechazado - Mostrando modal");
+          sessionStorage.setItem(storageKey, 'true');
+          onPaymentFailed();
+        } else {
+          console.log(`ℹ️ Cambio a estado intermedio: ${estadoActual}`);
+        }
+      } else {
+        console.log("✓ Cambio detectado pero modal ya fue mostrado");
+      }
+
+      // Actualizar referencia
+      previousEstadoRef.current = estadoActual;
+    } else {
+      console.log("➡️ Estado sin cambios");
+    }
+  }, [pedidoExistente, cotizacionId, onPaymentSuccess, onPaymentFailed]);
+
+  // Resetear refs cuando cambia la cotización (nuevo intento de pago)
+  useEffect(() => {
+    console.log("🔄 Cotización cambió, reseteando detector");
+    previousEstadoRef.current = null;
+    isFirstRenderRef.current = true;
+  }, [cotizacionId]);
+}

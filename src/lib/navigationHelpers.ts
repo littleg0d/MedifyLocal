@@ -10,18 +10,22 @@ import { Router } from "expo-router";
 // ============================================================================
 
 export const navigateToRecetas = (router: Router) => {
+  console.log("📍 Navegando a: /(tabs)/recetas");
   router.push("/(tabs)/recetas");
 };
 
 export const navigateToPedidos = (router: Router) => {
+  console.log("📍 Navegando a: /(tabs)/pedidos");
   router.push("/(tabs)/pedidos");
 };
 
 export const navigateToPerfil = (router: Router) => {
+  console.log("📍 Navegando a: /(tabs)/perfil");
   router.push("/(tabs)/perfil");
 };
 
 export const navigateToHome = (router: Router) => {
+  console.log("📍 Navegando a: /(tabs)");
   router.push("/(tabs)");
 };
 
@@ -34,6 +38,7 @@ export const navigateToPagar = (
   recetaId: string,
   cotizacionId: string
 ) => {
+  console.log("📍 Navegando a: /pagar", { recetaId, cotizacionId });
   router.push({
     pathname: "/pagar",
     params: { recetaId, cotizacionId },
@@ -41,6 +46,7 @@ export const navigateToPagar = (
 };
 
 export const navigateToSolicitudes = (router: Router, recetaId: string) => {
+  console.log("📍 Navegando a: /solicitudes", { recetaId });
   router.push({
     pathname: "/solicitudes",
     params: { recetaId },
@@ -48,7 +54,13 @@ export const navigateToSolicitudes = (router: Router, recetaId: string) => {
 };
 
 export const navigateToCargarReceta = (router: Router) => {
-  router.push("/cargarReceta");
+  console.log("📍 Navegando a: /(tabs)/cargarReceta");
+  try {
+    router.push("/cargarReceta");
+    console.log("✅ Navegación iniciada correctamente");
+  } catch (error) {
+    console.error("❌ Error en navegación:", error);
+  }
 };
 
 // ============================================================================
@@ -56,9 +68,11 @@ export const navigateToCargarReceta = (router: Router) => {
 // ============================================================================
 
 export const replaceWithLogin = (router: Router) => {
-  router.replace("../auth/login");
+  console.log("📍 Reemplazando con: /(auth)/login");
+  router.replace("/auth/login");
 };
 
 export const replaceWithHome = (router: Router) => {
+  console.log("📍 Reemplazando con: /(tabs)");
   router.replace("/(tabs)");
 };

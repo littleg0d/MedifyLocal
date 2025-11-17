@@ -26,33 +26,39 @@ export default function Login() {
 
   const onSignIn = async () => {
     setError("");
+    const trimmedEmail = email.trim();
 
-    // Validar campos vacíos
-    if (!email.trim() || !password) {
+    // Validaciones cliente
+    if (!trimmedEmail || !password) {
+      console.log("[onSignIn] Validacion: Campos vacios."); // ✅ Validación
       setError("Por favor completá todos los campos");
       return;
     }
 
-    // Validar email con regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (!emailRegex.test(trimmedEmail)) {
+      console.log("[onSignIn] Validacion: Email invalido."); // ✅ Validación
       setError("Email inválido");
       return;
     }
 
-    // Validar longitud mínima de contraseña
     if (password.length < 6) {
+      console.log("[onSignIn] Validacion: Password corto."); // ✅ Validación
       setError("La contraseña debe tener al menos 6 caracteres");
       return;
     }
 
     try {
       setLoading(true);
-      // Solo hacer login, el _layout.tsx se encarga de redirigir según el rol
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      // No hacer router.replace aquí, dejar que _layout.tsx maneje la redirección
+      console.log(
+        `[onSignIn] Intentando signInWithEmailAndPassword con: ${trimmedEmail}` // ✅ Firebase Interaction
+      );
+
+      await signInWithEmailAndPassword(auth, trimmedEmail, password);
+
     } catch (e: any) {
-      const code = String(e?.code || "");
+      const code = String(e?.code || "UNKNOWN_ERROR");
+      console.log(`[onSignIn] _ERROR_ Firebase: ${code}`); // ✅ Firebase Error
 
       const errorMessages: { [key: string]: string } = {
         "auth/invalid-credential": "Email o contraseña incorrectos",
@@ -60,11 +66,13 @@ export default function Login() {
         "auth/wrong-password": "Email o contraseña incorrectos",
         "auth/invalid-email": "El formato del email es inválido",
         "auth/user-disabled": "Esta cuenta ha sido deshabilitada",
-        "auth/too-many-requests": "Demasiados intentos. Intentá nuevamente más tarde",
+        "auth/too-many-requests":
+          "Demasiados intentos. Intentá nuevamente más tarde",
         "auth/network-request-failed": "Error de conexión. Verificá tu internet",
       };
 
       let humanMessage = "No pudimos iniciar sesión. Intentá de nuevo";
+
       for (const [key, message] of Object.entries(errorMessages)) {
         if (code.includes(key)) {
           humanMessage = message;
@@ -75,16 +83,18 @@ export default function Login() {
       setError(humanMessage);
 
       if (__DEV__) {
-        console.error("Login error:", code, e.message);
+        console.log(" ❌❌❌❌ Login error:", code, e.message); // ✅ Debug/Error
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // ⚙️ Función para Google (placeholder)
   const handleGoogleSignIn = () => {
-    Alert.alert("Próximamente", "El inicio de sesión con Google estará disponible pronto");
+    Alert.alert(
+      "Próximamente",
+      "El inicio de sesión con Google estará disponible pronto"
+    );
   };
 
   // ---------- RENDER ----------
@@ -101,10 +111,16 @@ export default function Login() {
         >
           {/* Header */}
           <View style={styles.logoWrap}>
-            <Ionicons name="medkit-outline" size={28} color={colors.primaryDark} />
+            <Ionicons
+              name="medkit-outline"
+              size={28}
+              color={colors.primaryDark}
+            />
           </View>
           <Text style={styles.title}>Medify</Text>
-          <Text style={globalStyles.subtitle}>Tu medicación, sin complicaciones.</Text>
+          <Text style={globalStyles.subtitle}>
+            Tu medicación, sin complicaciones.
+          </Text>
 
           {/* Mensaje de error */}
           {error ? (
@@ -121,7 +137,7 @@ export default function Login() {
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
-                setError("");
+                setError(""); // Limpia error al tipear
               }}
               autoCapitalize="none"
               keyboardType="email-address"
@@ -136,7 +152,7 @@ export default function Login() {
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
-                setError("");
+                setError(""); // Limpia error al tipear
               }}
               secureTextEntry
               textContentType="password"
@@ -161,7 +177,7 @@ export default function Login() {
               </Text>
             </Pressable>
 
-            {/* Forgot password */}
+            {/* Olvidaste tu contraseña */}
             <Link href="/auth/forgot" asChild disabled={loading}>
               <Pressable disabled={loading}>
                 <Text style={[styles.link, loading && styles.linkDisabled]}>
@@ -171,14 +187,14 @@ export default function Login() {
             </Link>
           </View>
 
-          {/* Divider */}
+          {/* Divisor */}
           <View style={globalStyles.dividerRow}>
             <View style={globalStyles.divider} />
             <Text style={globalStyles.dividerText}>o</Text>
             <View style={globalStyles.divider} />
           </View>
 
-          {/* Social buttons */}
+          {/* Botones sociales */}
           <View style={styles.socialContainer}>
             <Pressable
               style={({ pressed }) => [
@@ -194,7 +210,7 @@ export default function Login() {
             </Pressable>
           </View>
 
-          {/* Register */}
+          {/* Registro */}
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>¿No tenés cuenta? </Text>
             <Link href="/auth/register" asChild disabled={loading}>
