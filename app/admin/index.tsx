@@ -11,7 +11,6 @@ export default function AdminDashboard() {
   const handleLogout = async () => {
     try {
       await signOut(auth); // ✅ Firebase Interaction
-      router.replace("/auth/login");
     } catch (error) {
       console.log(" ❌❌❌❌ [AdminDashboard] Error al cerrar sesion:", error); // ✅ Error
     }
